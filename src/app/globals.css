@@ -1,0 +1,132 @@
+/* Deliberately minimal — enough structure to use the app, no design system yet. */
+
+:root {
+  --bg: #ffffff;
+  --fg: #16191d;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #2563eb;
+  --danger: #b91c1c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --fg: #e8eaed;
+    --muted: #9aa3af;
+    --border: #262b33;
+    --accent: #60a5fa;
+    --danger: #f87171;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.site-header nav {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.brand {
+  font-weight: 600;
+  text-decoration: none;
+  color: inherit;
+}
+
+.balance {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.handle,
+.muted,
+.fine-print {
+  color: var(--muted);
+}
+
+.badge {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+.button {
+  display: inline-block;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.signin {
+  max-width: 420px;
+}
+
+.error {
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  color: var(--danger);
+}
+
+.fine-print {
+  font-size: 0.85rem;
+}
+
+footer {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  border-top: 1px solid var(--border);
+}

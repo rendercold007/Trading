@@ -81,8 +81,12 @@ or it overflows once `q/b` gets large.
 |---|---|
 | `src/lib/lmsr.ts` | Pure LMSR engine. Plain numbers, no I/O, no database. |
 | `src/lib/trade.ts` | Transactional trade service. The **only** supported way to move points or shares. |
+| `src/lib/authPolicy.ts` | Pure auth policy: admin list parsing, handle slugs, email canonicalisation. |
+| `src/lib/bans.ts` | Deny list: `isBanned`, `banEmail`, `unbanEmail`. No NextAuth dependency. |
+| `src/lib/auth.ts` | NextAuth wiring + `currentUser` / `requireUser` / `requireAdmin`. |
 | `src/lib/db.ts` | Prisma client singleton (hot-reload safe). |
 | `src/lib/loadEnv.ts` | Reads `.env` for scripts run outside Next. No-op under Next. |
+| `src/app/` | Next app router. Layout, home placeholder, `/signin`, auth route handler. |
 | `prisma/schema.prisma` | Data model. |
 
 ### Trade service API
@@ -104,11 +108,28 @@ Minimum trade size is `0.01` shares / `0.01` points, which keeps trades clear of
 the float-noisy region noted below. Each function takes an optional final Prisma
 client argument so tests can pass their own.
 
+### Auth API
+
+```ts
+currentUser()   // SessionUser | null — for pages that render both ways
+requireUser()   // throws AuthError("UNAUTHENTICATED") → 401
+requireAdmin()  // throws AuthError("FORBIDDEN") → 403
+banEmail(email, { reason, bannedBy })   // also revokes live sessions
+unbanEmail(email)
+isBanned(email)
+```
+
+`SessionUser` carries `{ id, email, name, handle, isAdmin, balance }`. Sessions
+are **database-backed, not JWT**: it costs a query per request, but a ban can
+revoke a live session and `isAdmin`/`balance` are never stale. Don't switch to
+the JWT strategy without solving both of those.
+
 ## Commands
 
 ```bash
 npm run dev         # dev server
-npm test            # engine (21) + trade service (23) = 44 tests; needs the DB up
+npm test            # 76 tests: lmsr 21, trade 23, authPolicy 20, bans 12; needs the DB up
+npm run build       # prisma generate + next build
 npx tsc --noEmit    # typecheck
 npx prisma generate # regenerate the client after editing schema.prisma
 npm run db:push     # sync Prisma schema to Postgres
@@ -171,8 +192,13 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
 - [x] Trade service tests (`src/lib/trade.test.ts`) — 23 tests against real Postgres,
       covering slippage, budget sizing, every rejection path, and concurrency
 - [x] Prisma client singleton (`src/lib/db.ts`), `.env` loader for scripts (`src/lib/loadEnv.ts`)
-- [ ] **NEXT:** Auth (Google, open registration, admin from `ADMIN_EMAILS`, ban list enforced)
-- [ ] Rate limiting on trades and sign-ups
+- [x] Auth (Google, open registration, admin from `ADMIN_EMAILS`, ban list enforced)
+- [x] Auth tests — `authPolicy.test.ts` (20, pure), `bans.test.ts` (12, real Postgres)
+- [x] Next.js app scaffold — layout, `/signin`, home placeholder, `globals.css`
+- [x] Google OAuth credentials in `.env`; **sign-up verified end to end** on
+      2026-07-29 — real Google account → `User` row with handle `aniket-singh`,
+      10,000 points, `isAdmin: true`, plus linked `Account` and `Session` rows
+- [ ] **NEXT:** Rate limiting on trades and sign-ups
 - [ ] Trade API route
 - [ ] Market list + market detail pages with probability chart
 - [ ] Admin: create market, resolve market (writes `Resolution`, pays out)
@@ -203,14 +229,33 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
 - Trading is refused on two independent conditions: `status !== OPEN`, and
   `closesAt` in the past. There is no job flipping OPEN to CLOSED at the close
   time, so the timestamp check is what actually halts trading.
-- No `src/app` yet — the Next.js app directory does not exist. The first UI or
-  API work has to scaffold it.
+- Admin rights are re-derived from `ADMIN_EMAILS` on **every** sign-in, so
+  removing an address demotes that account at its next login. `isAdmin` in the
+  database is a cache of the env var, not the source of truth. An empty or unset
+  `ADMIN_EMAILS` grants nobody admin — it is never treated as a wildcard.
+- Ban checks canonicalise Gmail addresses (dots stripped, `+tag` dropped), so
+  `first.last@gmail.com` and `firstlast@gmail.com` are one ban. Admin grants
+  deliberately do **not** canonicalise — a privilege grant should be exact.
+- Banning is not deletion. The user row and their trades stay; `Trade` is an
+  immutable ledger and the leaderboard has to stay reconstructible.
+- **Known sybil gap:** `User.email` is unique on the raw address, so someone can
+  register `first.last@gmail.com` *and* `firstlast@gmail.com` as two accounts.
+  Closing it needs a canonical-email column with its own unique constraint plus a
+  backfill. Deferred, not solved.
 - The project is not a git repository yet.
 
 ## Status
 
-Started 2026-07-28. The engine, data model and trade service are done and
-verified against a real database — the whole write path from a share count to a
-committed transaction works and is tested, including under concurrent load.
-Nothing is wired to HTTP yet; the next piece is auth, then the trade API route
-that exposes `buyShares`/`sellShares` to the browser.
+Started 2026-07-28. The engine, data model, trade service and auth are done and
+tested — 76 tests, `tsc --noEmit` clean, `next build` succeeds. As of 2026-07-29
+**a real Google account can sign up and land in Postgres with the right handle,
+balance and admin flag** — verified in a browser, not just in tests.
+
+Before deploying: the Google consent screen is still in **Testing** mode, so only
+listed test users can sign in. "Open registration" is not actually open until it
+is published. The OAuth app is also named "Trading" on the consent screen rather
+than "Prediction Market". Production needs `NEXTAUTH_URL` updated and a second
+authorised redirect URI for the deployed domain.
+
+Next is rate limiting, then the trade API route that exposes
+`buyShares`/`sellShares` to the browser behind `requireUser()`.
