@@ -1,0 +1,23 @@
+# Local Postgres for development. Port 5433 to avoid clashing with any
+# Postgres already running on the host's default 5432.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: market-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: market
+      POSTGRES_PASSWORD: market
+      POSTGRES_DB: market
+    ports:
+      - "5433:5432"
+    volumes:
+      - market-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U market -d market"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  market-db-data:

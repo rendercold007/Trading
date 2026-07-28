@@ -1,0 +1,232 @@
+// Prediction market — play-money only, open public registration.
+//
+// Money-ish columns are Decimal, never Float. Points and share counts are
+// written on every trade; float drift would silently create or destroy points
+// over a few hundred trades.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Auth (NextAuth / Auth.js Prisma adapter models)
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  /// Handle shown on the leaderboard. Defaults to the Google display name.
+  handle String? @unique
+
+  /// Spendable points. Locked value in open positions is NOT included here.
+  balance Decimal @default(10000) @db.Decimal(18, 4)
+
+  /// Admins can create and resolve markets.
+  isAdmin Boolean @default(false)
+
+  accounts       Account[]
+  sessions       Session[]
+  positions      Position[]
+  trades         Trade[]
+  createdMarkets Market[]      @relation("MarketCreator")
+  resolutions    Resolution[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+/// Registration is open to anyone, so the gate is a deny list rather than an
+/// allow list. Sign-in is refused for any email listed here.
+model BannedEmail {
+  email     String   @id
+  bannedAt  DateTime @default(now())
+  /// Why, so a ban can be reviewed or reversed later.
+  reason    String?
+  bannedBy  String?
+}
+
+// ---------------------------------------------------------------------------
+// Markets
+// ---------------------------------------------------------------------------
+
+enum MarketStatus {
+  OPEN
+  CLOSED // trading halted, awaiting resolution
+  RESOLVED
+  VOIDED // cancelled; all trades refunded at cost
+}
+
+enum Outcome {
+  YES
+  NO
+}
+
+model Market {
+  id       String @id @default(cuid())
+  /// URL-friendly identifier, e.g. "india-wins-toss-2026-08-01".
+  slug     String @unique
+  question String
+  /// Spells out exactly what makes this resolve YES. Written before trading
+  /// opens; ambiguity here is the single biggest source of resolution disputes.
+  rules    String @db.Text
+  category String?
+
+  status MarketStatus @default(OPEN)
+
+  /// LMSR liquidity parameter. Larger = deeper market, less price impact per
+  /// trade, larger maximum house subsidy (b * ln 2).
+  b Decimal @default(500) @db.Decimal(18, 4)
+
+  /// Outstanding shares held by traders. These two plus b fully determine price.
+  qYes Decimal @default(0) @db.Decimal(18, 4)
+  qNo  Decimal @default(0) @db.Decimal(18, 4)
+
+  /// Denormalised running totals, for cheap list rendering.
+  volume     Decimal @default(0) @db.Decimal(18, 4)
+  tradeCount Int     @default(0)
+
+  createdAt DateTime  @default(now())
+  /// Trading stops automatically at this time.
+  closesAt  DateTime
+  resolvedAt DateTime?
+
+  creatorId String
+  creator   User   @relation("MarketCreator", fields: [creatorId], references: [id])
+
+  positions    Position[]
+  trades       Trade[]
+  pricePoints  PricePoint[]
+  resolution   Resolution?
+
+  @@index([status, closesAt])
+}
+
+/// A user's holding in one side of one market. Shares are non-negative — to bet
+/// against an outcome you buy the opposite side rather than going short.
+model Position {
+  id       String  @id @default(cuid())
+  userId   String
+  marketId String
+  outcome  Outcome
+
+  shares Decimal @default(0) @db.Decimal(18, 4)
+  /// Total points paid in, net of proceeds from sells. Used for P&L display.
+  costBasis Decimal @default(0) @db.Decimal(18, 4)
+
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, marketId, outcome])
+  @@index([marketId])
+}
+
+enum TradeSide {
+  BUY
+  SELL
+}
+
+/// Immutable ledger. Never updated or deleted — every balance in the system
+/// should be reconstructible by replaying these in order.
+model Trade {
+  id       String @id @default(cuid())
+  userId   String
+  marketId String
+
+  outcome Outcome
+  side    TradeSide
+  /// Always positive; `side` carries the direction.
+  shares  Decimal   @db.Decimal(18, 4)
+  /// Points paid (BUY) or received (SELL), always positive.
+  cost    Decimal   @db.Decimal(18, 4)
+  /// cost / shares — the realised fill price, which differs from the quote
+  /// because of LMSR slippage.
+  avgPrice Decimal  @db.Decimal(18, 6)
+
+  /// Market state after this trade, so history is auditable without replay.
+  qYesAfter     Decimal @db.Decimal(18, 4)
+  qNoAfter      Decimal @db.Decimal(18, 4)
+  priceYesAfter Decimal @db.Decimal(18, 6)
+
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([marketId, createdAt])
+  @@index([userId, createdAt])
+}
+
+/// Appended on every trade to drive the probability-over-time chart.
+model PricePoint {
+  id        String   @id @default(cuid())
+  marketId  String
+  priceYes  Decimal  @db.Decimal(18, 6)
+  createdAt DateTime @default(now())
+
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([marketId, createdAt])
+}
+
+/// Audit record for how a market was settled. One per resolved market, kept
+/// separate from Market so the decision, the decider and the reasoning are all
+/// on the record rather than a single mutated status column.
+model Resolution {
+  id       String  @id @default(cuid())
+  marketId String  @unique
+  outcome  Outcome
+  /// Why it resolved this way, plus a source link where one exists.
+  reason   String  @db.Text
+
+  resolvedById String
+  resolvedAt   DateTime @default(now())
+  /// Total points paid out to winning holders.
+  totalPaidOut Decimal  @db.Decimal(18, 4)
+
+  market       Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  resolvedBy   User   @relation(fields: [resolvedById], references: [id])
+}
