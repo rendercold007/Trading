@@ -1,6 +1,6 @@
 "use client";
 
-import { signOutAction } from "./actions";
+import { signOutAction } from "../actions";
 
 /**
  * Sign-out has to be a POST so a prefetch or a stray GET can't log people out.

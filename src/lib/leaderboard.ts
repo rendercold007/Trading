@@ -18,6 +18,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "./db";
 import { roundPoints, tradeCost, type MarketState, type Outcome } from "./lmsr";
+import { STARTING_BALANCE } from "./marketConstants";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -43,8 +44,6 @@ export interface LeaderboardEntry {
   /** Null when the trader has not yet met the minimum to be ranked. */
   rank: number | null;
 }
-
-const STARTING_BALANCE = 10_000;
 
 /**
  * A trader's implied probability for one market, from what they actually paid.

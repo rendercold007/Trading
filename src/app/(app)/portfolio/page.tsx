@@ -42,7 +42,7 @@ export default async function PortfolioPage() {
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border p-10 text-center">
           <p className="text-sm text-muted">You don&rsquo;t hold any positions yet.</p>
           <Link
-            href="/"
+            href="/markets"
             className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
           >
             Browse markets

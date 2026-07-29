@@ -50,7 +50,7 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
 
   return (
     <div className="flex flex-col gap-6">
-      <Link href="/" className="text-sm text-muted transition-colors hover:text-fg">
+      <Link href="/markets" className="text-sm text-muted transition-colors hover:text-fg">
         ← All markets
       </Link>
 

@@ -13,3 +13,16 @@ export const DEFAULT_LIQUIDITY = 500;
 
 /** A resolution must explain itself; this is the minimum that counts as trying. */
 export const MIN_REASON_LENGTH = 10;
+
+/**
+ * Points every new account starts with.
+ *
+ * Mirrors the `User.balance` default in `schema.prisma`. Prisma cannot read a
+ * TypeScript constant, so those two have to be changed together — and changing
+ * this one alone silently affects only the profit calculation, not what new
+ * users actually receive.
+ */
+export const STARTING_BALANCE = 10_000;
+
+/** The same number written for prose. Locale pinned so it never renders as `10.000`. */
+export const STARTING_BALANCE_LABEL = STARTING_BALANCE.toLocaleString("en-US");

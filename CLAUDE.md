@@ -96,8 +96,13 @@ or it overflows once `q/b` gets large.
 | `src/lib/marketConstants.ts` | Values shared with client components. **No imports** — see below. |
 | `src/lib/apiSchema.ts` | Parses untrusted request bodies/queries into typed values. |
 | `src/lib/apiError.ts` | Maps thrown errors to HTTP status codes; origin check. |
+| `src/app/layout.tsx` | Document shell only — `<html>`/`<body>`. No header, deliberately. |
+| `src/app/page.tsx` | Landing page. Outside `(app)`, so it gets none of the app chrome. |
+| `src/app/signin/` | Sign in / sign up. Outside `(app)`; wears the landing theme. |
+| `src/app/actions.ts` | `signInAction` / `signOutAction`. Shared across both groups. |
+| `src/app/(app)/layout.tsx` | The signed-in chrome: header, balance, nav, footer. |
 | `src/app/` | Next app router — see routes below. |
-| `src/components/` | Shared UI: `MarketCard`, `ProbabilityBar`, `ProbabilityChart`, `TradeForm`. |
+| `src/components/` | Shared UI: `MarketCard`, `ProbabilityBar`, `ProbabilityChart`, `Sparkline`, `TradeForm`. |
 | `prisma/seed.ts` | Demo markets with simulated trading history. |
 | `prisma/schema.prisma` | Data model. |
 
@@ -105,12 +110,18 @@ or it overflows once `q/b` gets large.
 
 | Path | What |
 |---|---|
-| `/` | Market list (card grid). Readable signed out. |
+| `/` | **Landing page.** The pitch, own warm theme. Redirects to `/markets` if signed in. |
+| `/markets` | Market list (card grid). Readable signed out. Home once you have an account. |
 | `/markets/[slug]` | Detail: chart, rules, trade form, your position, activity. |
 | `/leaderboard` | Ranked traders. Public. |
 | `/portfolio` | Your holdings, marked to market. Requires sign-in. |
 | `/admin`, `/admin/new` | Create markets, settle them. Admin only. |
-| `/signin` | Google sign-in. |
+| `/signin` | Google sign-in. Landing theme. `?intent=signup` only changes the wording. |
+
+`/` and `/signin` sit outside the `(app)` route group and share the warm landing
+theme. Everything else lives inside `(app)`, which carries the signed-in chrome.
+See "Two layouts" below — this split is the reason the landing page can look
+nothing like the app.
 
 ### Trade service API
 
@@ -184,6 +195,29 @@ only one pays out.
   flipped under `prefers-color-scheme`. **Don't add `dark:` variants for
   colour** — if a colour needs a dark value, it wants a token.
 - `.tabular` on any number that changes in place, so digits don't jitter.
+- **Two layouts.** `src/app/layout.tsx` is the document shell and nothing else.
+  The header, nav, balance and footer live in `src/app/(app)/layout.tsx`, so `/`
+  and `/signin` — which sit outside that group — render without them. Putting
+  the app header back into the root layout would force a Portfolio link and a
+  second sign-in button onto the marketing page, and onto the sign-in page
+  itself. Any new *signed-in* route belongs inside `(app)`; the two signed-out
+  surfaces stay out of it.
+- **The landing theme is a token override, not a second stylesheet.** `.landing`
+  re-declares `--page`, `--fg`, `--accent` and the rest as warm paper and ink.
+  Because the token *names* are unchanged, `bg-surface` / `text-muted` keep
+  working inside it and shared components like `MarketCard` inherit the warm
+  palette for free. Style the landing with the same utilities as everywhere
+  else; do not reach for hard-coded hex.
+- The landing is deliberately unlike the app: serif display face, cream stock,
+  burnt-orange accent. Every other prediction market on the web is a dark
+  terminal with a blue accent, and looking like a clone of one is worse than
+  looking like nothing else. The app itself stays cool and dense, which is the
+  right call for reading prices — the contrast is intentional, not drift.
+- `.card-lift` gives a card a 3px rise and a shadow on hover. It is a class
+  rather than utilities on each card so the `prefers-reduced-motion` opt-out
+  and the `hover: hover` guard live in one place — without the latter, touch
+  browsers leave the card stuck in its lifted state after a tap. Hover only,
+  never focus: lifting on focus makes tabbing through a grid jump around.
 - Server components read through `markets.ts` / `leaderboard.ts`; they never
   touch Prisma directly and never hand a `Decimal` or `Date` to a client
   component (both throw at the serialisation boundary — hence the `number`
@@ -235,9 +269,9 @@ the JWT strategy without solving both of those.
 
 ```bash
 npm run dev         # dev server
-npm test            # 165 tests: lmsr 21, trade 23, apiSchema 22, authPolicy 20,
+npm test            # 175 tests: lmsr 21, trade 23, apiSchema 22, authPolicy 20,
                     #   apiError 17, rateLimit 16, bans 12, clientIp 12,
-                    #   resolve 11, adminMarkets 11; needs the DB up
+                    #   resolve 11, adminMarkets 11, markets 10; needs the DB up
 npm run build       # prisma generate + next build
 npx tsc --noEmit    # typecheck
 npx prisma generate # regenerate the client after editing schema.prisma
@@ -320,6 +354,13 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
 - [x] Settlement engine (`src/lib/resolve.ts`) + 11 tests
 - [x] Admin: create market, resolve / void / close early
 - [x] Leaderboard (Brier score + minimum settled markets) + portfolio page
+- [x] Landing page at `/` with its own warm theme and sign-in / sign-up in the
+      header; app routes moved into the `(app)` group; market list now at
+      `/markets`; cards lift on hover. Verified in both colour schemes.
+- [x] Dashboard life: per-card sparkline (server-rendered SVG) + 24h delta
+      chip + category eyebrow + live pulse dot; two-segment YES/NO bar; stats
+      strip (`marketStats`) on `/markets`. 10 new pure tests for
+      `downsample`/`trailingDelta`. Verified in both colour schemes.
 - [ ] **NEXT:** Deploy notes (Vercel + Neon/Supabase)
 - [ ] Publish the Google consent screen so open registration is actually open
 - [ ] Categories filter on the list page (`listCategories` exists, unused)
@@ -391,6 +432,28 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
   layer, not the only one.
 - There is no `/api/markets`. Pages are server components reading `markets.ts`
   directly; only the trade form needs HTTP, because it runs in the browser.
+- **"Sign in" and "Sign up" are the same Google flow.** Auth.js registers an
+  unknown Google account on first use, so there is nothing to separate. The
+  landing page shows both buttons because visitors look for the one that matches
+  their situation, and `?intent=signup` changes only the heading and blurb on
+  `/signin`. Don't build a second endpoint for it.
+- The landing page renders **real markets**, not mock-ups. A landing page for a
+  market that shows invented prices is lying about the one thing the product is.
+  It shows the first three OPEN markets and drops the whole section when there
+  are none, rather than displaying an empty shelf.
+- `STARTING_BALANCE` lives in `marketConstants.ts` and is mirrored by the
+  `User.balance` default in `schema.prisma`. Prisma cannot read a TS constant,
+  so those two have to be changed together — changing only the constant silently
+  affects the profit calculation without changing what new users receive.
+- `/signin` wears the **landing** theme, not the app theme, and lives outside
+  `(app)` for that reason. It is the far side of the landing page's two buttons,
+  and a palette swap mid-flow reads as a broken link. The cost is that reaching
+  it from the app header crosses the other way; that was judged the lesser seam,
+  since sign-up traffic is the volume case and the app header's Sign in button
+  only ever shows to signed-out visitors anyway.
+- `actions.ts` sits at `src/app/actions.ts`, not inside `(app)`, because
+  `/signin` (outside the group) and `signout-button.tsx` (inside it) both import
+  it. Moving it back into `(app)` breaks the sign-in page's import.
 - **A client component must never import from a module that touches Prisma or
   `node:fs`** — it drags them into the browser bundle and the build fails with
   `UnhandledSchemeError: node:fs`. That is why `marketConstants.ts` exists and
@@ -403,6 +466,26 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
   between trades and jump when one lands; a smooth curve draws probabilities the
   market never quoted. The Y axis is pinned to 0–100% for the same reason —
   auto-scaling makes a 48→52% drift look like a collapse.
+- The card **sparkline** (`Sparkline.tsx`) is stepAfter too, but its Y window is
+  **floored, not pinned**: fitted to the data, never narrower than 30pp. A hard
+  0–100 pin in a 32px box renders every real move as a ~5px wiggle (tried it —
+  looks dead); naive auto-fit is the drama inflation the pin exists to prevent.
+  The floor bounds exaggeration at ~3×. Its X axis spans first trade → last
+  trade, *not* → now: padding to "now" was also tried, and it crushes the whole
+  path into the left edge as soon as a market goes quiet for a few days.
+- **The yes/no pair fails strict CVD checks** — deutan ΔE ≈ 6 (light) and ≈ 4.6
+  (dark) between `--yes` and `--no`, per the dataviz palette validator. Usable
+  only because hue is never the sole encoding, so keep it that way: the bar has
+  fixed order (YES left, NO right) matching the labels under it, the 24h chip
+  carries an arrow + signed number, probabilities are always written as text.
+  Don't add any element where green-vs-rose alone is the answer.
+- `listMarkets` fetches price history for **all** listed markets in one query
+  and computes `spark`/`delta24h` per market in JS. Fine at this scale; if the
+  PricePoint table gets heavy the fix is a windowed query or a cached spark
+  column on Market — never an N+1 per card.
+- The live pulse dot (`.pulse-dot`) breathes at 2.4s — slow enough that the eye
+  doesn't track it involuntarily. Reduced-motion turns it off. It renders only
+  on tradeable markets (`isTradeable`), not merely OPEN-status ones.
 - Seeding a market whose `closesAt` is already past requires creating it with a
   future close time, trading, *then* moving the clock back. The trade service
   correctly refuses trades on an expired market.

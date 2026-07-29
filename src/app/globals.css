@@ -8,6 +8,9 @@
  * so utilities like `bg-surface` or `text-yes` resolve to the right value in
  * both themes without a single `dark:` variant in the markup. Adding a `dark:`
  * class for colour is almost always a sign something should be a token instead.
+ *
+ * The landing page re-declares the same token names under `.landing` to get a
+ * different look out of the same utilities — see that block below.
  */
 
 :root {
@@ -30,6 +33,12 @@
   --no-soft: #ffe4e6;
 
   --danger: #b91c1c;
+
+  /* Shadow cast by a card lifting on hover. A token because it needs a much
+     heavier value on a dark page to read as depth at all. */
+  --lift-shadow: rgb(15 23 42 / 0.16);
+
+  --display-family: ui-serif, Georgia, "Times New Roman", serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -50,6 +59,55 @@
     --no-soft: #2d1218;
 
     --danger: #f87171;
+
+    --lift-shadow: rgb(0 0 0 / 0.55);
+  }
+}
+
+/**
+ * Landing theme — warm paper and ink, not the cool slate of the app.
+ *
+ * The landing page is the one surface a stranger sees before they know what
+ * this is, and every other prediction market on the web looks like a terminal:
+ * near-black, blue accent, dense tables. This goes the other way — cream stock,
+ * warm ink, a burnt-orange accent and a serif display face, closer to an
+ * almanac than a trading screen. It is a deliberate contrast with the app
+ * itself, which stays cool and dense because that is right for reading prices.
+ *
+ * Implemented by re-declaring the same token names on a wrapper element, so
+ * `bg-surface` / `text-muted` / `border-border` keep working unchanged and
+ * shared components (MarketCard) inherit the warm palette for free.
+ */
+.landing {
+  --page: #f7f3ec;
+  --surface: #fffdf9;
+  --surface-hover: #fdf8f0;
+  --fg: #1c1917;
+  --muted: #6b6259;
+  --faint: #a39a8f;
+  --border: #e6ddd0;
+  --accent: #b4400f;
+  --accent-fg: #fffdf9;
+
+  --lift-shadow: rgb(66 44 25 / 0.18);
+
+  background: var(--page);
+  color: var(--fg);
+}
+
+@media (prefers-color-scheme: dark) {
+  .landing {
+    --page: #16130f;
+    --surface: #1e1a15;
+    --surface-hover: #262119;
+    --fg: #f0e9df;
+    --muted: #a89e91;
+    --faint: #756b5f;
+    --border: #2e2820;
+    --accent: #f08b4c;
+    --accent-fg: #16130f;
+
+    --lift-shadow: rgb(0 0 0 / 0.6);
   }
 }
 
@@ -70,6 +128,7 @@
   --color-danger: var(--danger);
 
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--display-family);
 }
 
 @layer base {
@@ -93,5 +152,67 @@
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+
+  /**
+   * Cards rise slightly under the cursor.
+   *
+   * A class rather than Tailwind utilities on each card so the
+   * reduced-motion opt-out lives in exactly one place. Translation is small
+   * on purpose: enough to feel responsive, not enough to reflow neighbours
+   * or make a long grid feel restless while scrolling. Hover only — the
+   * focus ring already marks the keyboard position, and lifting on focus
+   * would make tabbing through a grid jump around.
+   */
+  .card-lift {
+    transition:
+      transform 150ms ease,
+      box-shadow 150ms ease,
+      background-color 150ms ease,
+      border-color 150ms ease;
+  }
+
+  @media (hover: hover) {
+    .card-lift:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 24px -14px var(--lift-shadow);
+      border-color: var(--faint);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card-lift {
+      transition: background-color 150ms ease, border-color 150ms ease;
+    }
+
+    .card-lift:hover {
+      transform: none;
+    }
+  }
+
+  /**
+   * The "market is live" dot: a slow breathing fade, not a blink. 2.4s keeps
+   * it below the level of animation the eye tracks involuntarily — the point
+   * is a pulse you notice when you look, not one that pulls your gaze from
+   * every card at once.
+   */
+  .pulse-dot {
+    animation: pulse-dot 2.4s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pulse-dot {
+      animation: none;
+    }
   }
 }
