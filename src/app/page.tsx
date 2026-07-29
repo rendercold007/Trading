@@ -33,7 +33,7 @@ export default async function LandingPage() {
     <div className="landing min-h-dvh">
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-6">
         <span className="font-display text-lg font-semibold tracking-tight text-fg">
-          Prediction Market
+          Outcome
         </span>
 
         <nav className="flex items-center gap-2 text-sm">

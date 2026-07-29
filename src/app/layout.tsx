@@ -15,7 +15,7 @@ import "./globals.css";
  */
 
 export const metadata: Metadata = {
-  title: "Prediction Market",
+  title: "Outcome",
   description:
     "A play-money prediction market. Trade on what you think will happen — points only, no cash value.",
 };

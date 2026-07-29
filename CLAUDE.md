@@ -1,6 +1,6 @@
-# Prediction Market
+# Outcome
 
-An open, publicly registerable prediction market — Polymarket/Kalshi mechanics at
+**Outcome** is an open, publicly registerable prediction market — Polymarket/Kalshi mechanics at
 small scale. Play-money only. Anyone with the link can open it and sign up; there
 is no invite gate and no allowlist.
 
@@ -20,37 +20,26 @@ is no invite gate and no allowlist.
 
 ## Open registration changes the risk profile
 
-This started as an invite-only friend group where points were a scoreboard and any
-real settle-up happened privately between people who knew each other. Public sign-up
-changes two things materially, and both are decisions to make deliberately rather
-than drift into.
-
-**1. Points must stay points.** A private arrangement among friends is a private
-arrangement. A publicly registerable site where strangers' points convert to money —
-even informally, even if the app never touches a rupee — is a different thing, and it
-is the thing India's Promotion and Regulation of Online Gaming Act 2025 targets. The
-Act bans online real-money gaming nationwide and criminalises *offering, facilitating,
-advertising, and payment-processing* for it. Facilitation is broad enough to reach a
-platform that knowingly runs the odds and lets users settle outside it.
-
-So for the open version: **no cash-out path, no advertised exchange rate, no
+**Points must stay points.** A publicly registerable site where strangers' points
+convert to money — even informally, even if the app never touches a rupee — is what
+India's Promotion and Regulation of Online Gaming Act 2025 targets; it criminalises
+*offering, facilitating, advertising, and payment-processing* for real-money gaming,
+and "facilitating" is broad enough to reach a platform that runs the odds and lets
+users settle outside it. So: **no cash-out path, no advertised exchange rate, no
 official settle-up mechanism, no prize pool.** The leaderboard is the prize. If real
 money ever enters the picture, that is a lawyer conversation, not a code change.
 
-**2. Anonymous users behave differently from friends.** Design for it:
+**Anonymous users behave differently from friends.** Design for it:
 
-- **Multi-accounting.** Fresh accounts start with 10,000 points, so anyone can farm
-  the leaderboard by registering repeatedly and keeping only the lucky accounts.
-  Mitigations: Google-only sign-in, rank by long-run calibration and Brier score
-  rather than raw point total, require a minimum number of resolved markets before
-  a user appears on the leaderboard.
-- **Market manipulation.** Someone can push a price with a big trade purely to move
-  the displayed probability. LMSR makes this self-punishing (they eat the slippage),
-  which is a real argument for the AMM over an order book here.
-- **Spam and abuse.** Hence admin-only market creation, plus rate limiting on trades
-  and a moderation path for handles.
-- **Sybil-resistant seeding.** Never hand out points for signing up beyond the
-  initial balance; no referral bonuses.
+- **Multi-accounting.** Fresh accounts start with 10,000 points, so the leaderboard
+  is farmable by registering repeatedly and keeping the lucky accounts. Mitigations:
+  Google-only sign-in, rank by Brier score rather than raw points, require a minimum
+  number of resolved markets before a user is ranked.
+- **Market manipulation.** LMSR makes pushing the price self-punishing (they eat the
+  slippage) — a real argument for the AMM over an order book here.
+- **Spam and abuse.** Hence admin-only market creation and rate limiting.
+- **Sybil-resistant seeding.** Never hand out points beyond the initial balance; no
+  referral bonuses.
 
 ## Economic parameters (all tunable)
 
@@ -119,9 +108,7 @@ or it overflows once `q/b` gets large.
 | `/signin` | Google sign-in. Landing theme. `?intent=signup` only changes the wording. |
 
 `/` and `/signin` sit outside the `(app)` route group and share the warm landing
-theme. Everything else lives inside `(app)`, which carries the signed-in chrome.
-See "Two layouts" below — this split is the reason the landing page can look
-nothing like the app.
+theme; everything else lives inside `(app)`. See "Two layouts" below.
 
 ### Trade service API
 
@@ -209,10 +196,8 @@ only one pays out.
   palette for free. Style the landing with the same utilities as everywhere
   else; do not reach for hard-coded hex.
 - The landing is deliberately unlike the app: serif display face, cream stock,
-  burnt-orange accent. Every other prediction market on the web is a dark
-  terminal with a blue accent, and looking like a clone of one is worse than
-  looking like nothing else. The app itself stays cool and dense, which is the
-  right call for reading prices — the contrast is intentional, not drift.
+  burnt-orange accent, versus the app's cool dense palette for reading prices.
+  The contrast is intentional, not drift — don't "harmonise" them.
 - `.card-lift` gives a card a 3px rise and a shadow on hover. It is a class
   rather than utilities on each card so the `prefers-reduced-motion` opt-out
   and the `hover: hover` guard live in one place — without the latter, touch
@@ -322,50 +307,6 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
   the service; they do not open their own transactions against these tables.
 - `Trade` is an immutable ledger: never updated, never deleted.
 
-## Progress
-
-- [x] Project scaffold (`package.json`), deps installed
-- [x] `CLAUDE.md`
-- [x] LMSR engine (`src/lib/lmsr.ts`) — pricing, cost, budget inversion, payout
-- [x] LMSR test suite (`src/lib/lmsr.test.ts`) — 21 tests, all passing
-- [x] Prisma schema (users, markets, positions, trades, price history, resolutions)
-- [x] Local Postgres running; schema pushed and verified
-- [x] `.env.example`, `.gitignore`, `docker-compose.yml`, `tsconfig.json`
-- [x] Trade service (`src/lib/trade.ts`) — transactional buy/sell, quoting, marks
-- [x] Trade service tests (`src/lib/trade.test.ts`) — 23 tests against real Postgres,
-      covering slippage, budget sizing, every rejection path, and concurrency
-- [x] Prisma client singleton (`src/lib/db.ts`), `.env` loader for scripts (`src/lib/loadEnv.ts`)
-- [x] Auth (Google, open registration, admin from `ADMIN_EMAILS`, ban list enforced)
-- [x] Auth tests — `authPolicy.test.ts` (20, pure), `bans.test.ts` (12, real Postgres)
-- [x] Next.js app scaffold — layout, `/signin`, home placeholder, `globals.css`
-- [x] Google OAuth credentials in `.env`; **sign-up verified end to end** on
-      2026-07-29 — real Google account → `User` row with handle `aniket-singh`,
-      10,000 points, `isAdmin: true`, plus linked `Account` and `Session` rows
-- [x] Rate limiting (`src/lib/rateLimit.ts`, `src/lib/clientIp.ts`) — token bucket
-      in Postgres; enforced inside the trade service and in the auth `signIn`
-      callback. 28 tests, including that parallel calls cannot exceed the burst.
-- [x] Trade API route (`POST /api/trade`) + quote route (`GET /api/quote`),
-      with error mapping and request validation. 39 tests; verified live over
-      HTTP against a real session on 2026-07-29.
-- [x] Tailwind v4 set up; design tokens with automatic light/dark
-- [x] Seed script (`prisma/seed.ts`) — 6 markets with simulated trading history
-- [x] Market list (card grid) + market detail with probability chart
-- [x] Trade form — live quotes, buy by points / sell by shares, error handling
-- [x] Settlement engine (`src/lib/resolve.ts`) + 11 tests
-- [x] Admin: create market, resolve / void / close early
-- [x] Leaderboard (Brier score + minimum settled markets) + portfolio page
-- [x] Landing page at `/` with its own warm theme and sign-in / sign-up in the
-      header; app routes moved into the `(app)` group; market list now at
-      `/markets`; cards lift on hover. Verified in both colour schemes.
-- [x] Dashboard life: per-card sparkline (server-rendered SVG) + 24h delta
-      chip + category eyebrow + live pulse dot; two-segment YES/NO bar; stats
-      strip (`marketStats`) on `/markets`. 10 new pure tests for
-      `downsample`/`trailingDelta`. Verified in both colour schemes.
-- [ ] **NEXT:** Deploy notes (Vercel + Neon/Supabase)
-- [ ] Publish the Google consent screen so open registration is actually open
-- [ ] Categories filter on the list page (`listCategories` exists, unused)
-- [ ] Prune stale rate-limit buckets on a schedule (`pruneStaleBuckets` exists)
-
 ## Notes for future sessions
 
 - The engine is pure and fully tested — **do not** inline LMSR maths anywhere
@@ -446,11 +387,10 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
   so those two have to be changed together — changing only the constant silently
   affects the profit calculation without changing what new users receive.
 - `/signin` wears the **landing** theme, not the app theme, and lives outside
-  `(app)` for that reason. It is the far side of the landing page's two buttons,
-  and a palette swap mid-flow reads as a broken link. The cost is that reaching
-  it from the app header crosses the other way; that was judged the lesser seam,
-  since sign-up traffic is the volume case and the app header's Sign in button
-  only ever shows to signed-out visitors anyway.
+  `(app)` for that reason: it is the far side of the landing page's two buttons,
+  and a palette swap mid-flow reads as a broken link. Reaching it from the app
+  header crosses the other way — judged the lesser seam, since sign-up is the
+  volume case.
 - `actions.ts` sits at `src/app/actions.ts`, not inside `(app)`, because
   `/signin` (outside the group) and `signout-button.tsx` (inside it) both import
   it. Moving it back into `(app)` breaks the sign-in page's import.
@@ -498,29 +438,18 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
 
 ## Status
 
-Started 2026-07-28. The engine, data model, trade service and auth are done and
-tested — 76 tests, `tsc --noEmit` clean, `next build` succeeds. As of 2026-07-29
-**a real Google account can sign up and land in Postgres with the right handle,
-balance and admin flag** — verified in a browser, not just in tests.
+**The MVP is complete and working end to end** — trading, pricing, resolution and
+leaderboard all verified in a browser, not just in tests. 175 tests pass,
+`tsc --noEmit` is clean, `next build` succeeds.
 
-Before deploying: the Google consent screen is still in **Testing** mode, so only
-listed test users can sign in. "Open registration" is not actually open until it
-is published. The OAuth app is also named "Trading" on the consent screen rather
-than "Prediction Market". Production needs `NEXTAUTH_URL` updated and a second
-authorised redirect URI for the deployed domain.
+Remaining, in order:
 
-**The MVP is complete and working end to end.** 165 tests, `tsc --noEmit` clean,
-`next build` succeeds. Verified in a browser on 2026-07-29: signed in with a real
-Google account, created a market through the admin UI, bought and sold through
-the trade form (balance, price, chart, position and leaderboard all updated),
-and resolved a market with a sourced reason that paid out 481 points.
-
-Everything in the original scope — trading, pricing, resolution, leaderboard — is
-done. What remains before this can be shared publicly:
-
-1. **Publish the Google consent screen.** It is still in Testing mode, so only
-   listed test users can sign in. "Open registration" is not actually open yet.
-2. **Deploy** (Vercel + Neon/Supabase), with `NEXTAUTH_URL` and a second
-   authorised redirect URI for the real domain.
-3. Rename the OAuth app from "Trading" to "Prediction Market" — it is what users
-   see on the consent screen.
+1. **Publish the Google consent screen.** Still in Testing mode, so only listed
+   test users can sign in — "open registration" is not actually open yet.
+2. **Rename the OAuth app** from "Trading" to "Outcome"; it is what users see on
+   the consent screen.
+3. **Deploy** (Vercel + Neon/Supabase), with `NEXTAUTH_URL` updated and a second
+   authorised redirect URI for the real domain. No deploy notes written yet.
+4. Categories filter on `/markets` (`listCategories` exists, unused).
+5. Prune stale rate-limit buckets on a schedule (`pruneStaleBuckets` exists,
+   called only from its own test).

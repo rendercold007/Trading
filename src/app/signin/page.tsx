@@ -51,7 +51,7 @@ export default async function SignInPage({
           href="/"
           className="font-display text-lg font-semibold tracking-tight text-fg transition-opacity hover:opacity-70"
         >
-          Prediction Market
+          Outcome
         </Link>
       </header>
 
