@@ -24,11 +24,15 @@ const prisma = new PrismaClient();
 /** Everything this file creates is tagged with this so cleanup is exact. */
 const RUN = `test-${randomUUID().slice(0, 8)}`;
 
+/** User ids created here, so their rate-limit buckets can be cleaned up too. */
+const createdUserIds: string[] = [];
+
 async function makeUser(balance = 10000): Promise<string> {
   const user = await prisma.user.create({
     data: { email: `${RUN}-${randomUUID()}@example.test`, balance, name: "Test Trader" },
     select: { id: true },
   });
+  createdUserIds.push(user.id);
   return user.id;
 }
 
@@ -75,6 +79,12 @@ before(async () => {
 after(async () => {
   await prisma.market.deleteMany({ where: { slug: { startsWith: RUN } } });
   await prisma.user.deleteMany({ where: { email: { startsWith: RUN } } });
+
+  // Rate-limit buckets are keyed by user id and have no FK to User, so they
+  // outlive the cascade and have to be cleared explicitly.
+  await prisma.rateLimit.deleteMany({
+    where: { key: { in: [...createdUserIds.map((id) => `trade:${id}`), "trade:nonexistent"] } },
+  });
   await prisma.$disconnect();
 });
 

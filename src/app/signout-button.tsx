@@ -9,7 +9,10 @@ import { signOutAction } from "./actions";
 export function SignOutButton() {
   return (
     <form action={signOutAction}>
-      <button type="submit" className="link-button">
+      <button
+        type="submit"
+        className="text-muted underline-offset-2 transition-colors hover:text-fg hover:underline"
+      >
         Sign out
       </button>
     </form>

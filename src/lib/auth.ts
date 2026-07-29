@@ -19,6 +19,8 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "./db";
 import { handleCandidate, isAdminEmail, normalizeEmail, suffixedHandle } from "./authPolicy";
 import { isBanned } from "./bans";
+import { clientIp } from "./clientIp";
+import { consume } from "./rateLimit";
 
 declare module "next-auth" {
   interface Session {
@@ -75,6 +77,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user }) {
       if (!user.email) return false;
       if (await isBanned(user.email)) return "/signin?error=banned";
+
+      // Rate limit by IP, with a different budget for creating an account than
+      // for signing back into one. Account creation is the expensive action —
+      // it is how someone farms the leaderboard with throwaway accounts.
+      const ip = await clientIp();
+      if (ip) {
+        const existing = await prisma.user.findUnique({
+          where: { email: normalizeEmail(user.email) },
+          select: { id: true },
+        });
+        const { allowed } = await consume(existing ? "signin" : "signup", ip);
+        if (!allowed) return "/signin?error=rate_limited";
+      } else {
+        // Fail open. Bucketing every unidentifiable request under one key would
+        // let a single abuser lock out every user behind an unknown proxy, which
+        // is a worse failure than not limiting. Logged so it is visible if the
+        // deployment is misconfigured and this becomes the normal path.
+        console.warn("[auth] client IP unavailable; sign-in rate limit not applied");
+      }
 
       // Re-derive admin rights from the environment on every sign-in, so
       // removing an address from ADMIN_EMAILS demotes that account. This is a

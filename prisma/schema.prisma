@@ -87,6 +87,22 @@ model BannedEmail {
   bannedBy  String?
 }
 
+/// Token-bucket rate limiter state — one row per (action, subject) pair.
+///
+/// Deliberately in Postgres rather than in process memory: on Vercel the app
+/// runs as many short-lived instances, so an in-memory counter would reset
+/// constantly and limit nothing. Every instance sharing one row is the point.
+model RateLimit {
+  /// "<action>:<subject>", e.g. "trade:cm123..." or "signup:203.0.113.7".
+  key       String   @id
+  /// Tokens remaining. Refilled by elapsed time on each check, capped at burst.
+  tokens    Decimal  @db.Decimal(12, 4)
+  updatedAt DateTime @default(now())
+
+  /// For pruning buckets nobody has touched in a while.
+  @@index([updatedAt])
+}
+
 // ---------------------------------------------------------------------------
 // Markets
 // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "./db";
+import { enforce as enforceRateLimit } from "./rateLimit";
 import {
   applyTrade,
   averagePrice,
@@ -58,6 +59,32 @@ export class TradeError extends Error {
 
 /** Anything with the Prisma model methods — the client itself or a `$transaction` handle. */
 type Db = PrismaClient | Prisma.TransactionClient;
+
+/**
+ * Escape hatch for callers that are not user requests — the seed script, admin
+ * tooling, tests. **Never set this from a request handler**: the limit is
+ * enforced here rather than in the route precisely so that forgetting it in one
+ * route cannot leave a hole.
+ */
+export interface TradeOptions {
+  skipRateLimit?: boolean;
+}
+
+/**
+ * Spend a trade token before doing any work.
+ *
+ * Deliberately outside `$transaction`: the limiter writes a row, and doing that
+ * inside the trade transaction would hold the market lock for the duration and
+ * make a rejected trade's bookkeeping roll back with it.
+ */
+async function checkTradeRateLimit(
+  userId: string,
+  opts: TradeOptions | undefined,
+  db: Db,
+): Promise<void> {
+  if (opts?.skipRateLimit) return;
+  await enforceRateLimit("trade", userId, db);
+}
 
 export interface TradeResult {
   tradeId: string;
@@ -315,10 +342,12 @@ export async function buyShares(
     outcome: Outcome;
     shares?: number;
     budget?: number;
-  },
+  } & TradeOptions,
   db: PrismaClient = defaultPrisma,
 ): Promise<TradeResult> {
   const { userId, marketId, outcome } = args;
+
+  await checkTradeRateLimit(userId, args, db);
 
   return db.$transaction(async (tx) => {
     const { state } = await lockMarketForTrading(tx, marketId);
@@ -405,10 +434,12 @@ export async function sellShares(
     marketId: string;
     outcome: Outcome;
     shares: number;
-  },
+  } & TradeOptions,
   db: PrismaClient = defaultPrisma,
 ): Promise<TradeResult> {
   const { userId, marketId, outcome } = args;
+
+  await checkTradeRateLimit(userId, args, db);
 
   return db.$transaction(async (tx) => {
     const { state } = await lockMarketForTrading(tx, marketId);
