@@ -10,7 +10,14 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime uses the POOLED connection (Neon's -pooler host / PgBouncer):
+  // Vercel spins up many short-lived instances and would otherwise exhaust
+  // Postgres' connection limit. Schema work (`db push`, migrate, introspect)
+  // uses the DIRECT connection, because those don't work through a transaction
+  // pooler. Locally both point at the same Docker Postgres — there is no pooler,
+  // so DIRECT_URL just mirrors DATABASE_URL.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------
