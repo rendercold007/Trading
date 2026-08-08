@@ -13,7 +13,7 @@ is no invite gate and no allowlist.
 | Market types | **Binary YES/NO** only (MVP) | Covers most of what people bet on. Multi-outcome is a later extension. |
 | Market creation | **Admins only** for now | Open creation invites spam and unresolvable questions from anonymous accounts. Revisit once moderation exists. |
 | Platform | **Next.js web app** (mobile-friendly), one shared URL | No app-store friction, works on every device. |
-| Auth | **Google sign-in** via NextAuth, **open registration** — anyone with the link can create an account | One tap, no password resets to support. Google as the only provider raises the cost of mass multi-accounting versus email/password. |
+| Auth | **Google sign-in** *and* **email/password**, via NextAuth, **open registration** — anyone with the link can create an account | Two ways in, one account per email. Email/password is guarded by hCaptcha + IP rate limiting to replace the multi-accounting friction that Google-only used to provide on its own. |
 | Resolution | **Admin resolves**, with a public audit log and a mandatory sourced reason | Simple and fast. With strangers trading, the audit trail stops being a nicety — the sourced reason is what makes a resolution defensible. |
 | Stack | Next.js + TypeScript + Postgres (Prisma) | Transactional integrity matters for a market engine; Postgres gives it. |
 | Scope | Working MVP first, polish after | Trading, pricing, resolution, leaderboard end to end. |
@@ -33,8 +33,11 @@ money ever enters the picture, that is a lawyer conversation, not a code change.
 
 - **Multi-accounting.** Fresh accounts start with 10,000 points, so the leaderboard
   is farmable by registering repeatedly and keeping the lucky accounts. Mitigations:
-  Google-only sign-in, rank by Brier score rather than raw points, require a minimum
-  number of resolved markets before a user is ranked.
+  hCaptcha and per-IP signup rate limiting on the email/password path (Google's own
+  friction covers the Google path), rank by Brier score rather than raw points, and
+  require a minimum number of resolved markets before a user is ranked. Email/password
+  lowers the bar to a new account versus Google-only, which is exactly why the captcha
+  and the harsh `signup` bucket (3 per IP, then 1/hour) sit in front of it.
 - **Market manipulation.** LMSR makes pushing the price self-punishing (they eat the
   slippage) — a real argument for the AMM over an order book here.
 - **Spam and abuse.** Hence admin-only market creation and rate limiting.
@@ -70,7 +73,12 @@ or it overflows once `q/b` gets large.
 |---|---|
 | `src/lib/lmsr.ts` | Pure LMSR engine. Plain numbers, no I/O, no database. |
 | `src/lib/trade.ts` | Transactional trade service. The **only** supported way to move points or shares. |
-| `src/lib/authPolicy.ts` | Pure auth policy: admin list parsing, handle slugs, email canonicalisation. |
+| `src/lib/authPolicy.ts` | Pure auth policy: admin list parsing, handle slugs, email canonicalisation, email/password validation. |
+| `src/lib/password.ts` | scrypt password hashing (Node `crypto`, no deps). Pure, `hashPassword`/`verifyPassword`. |
+| `src/lib/captcha.ts` | Server-side hCaptcha `siteverify`. Skips when no secret set; injectable `fetch`. |
+| `src/lib/session.ts` | Mints a database `Session` row + the Auth.js cookie, for the email/password flow. |
+| `src/lib/handles.ts` | `assignHandle` — unique leaderboard handle assignment, shared by both signup paths. |
+| `src/lib/credentials.ts` | Email/password register/sign-in service: `registerCredentials`, `signInCredentials`. Reuses ban/rate-limit/admin gates. |
 | `src/lib/bans.ts` | Deny list: `isBanned`, `banEmail`, `unbanEmail`. No NextAuth dependency. |
 | `src/lib/rateLimit.ts` | Token-bucket limiter over Postgres, plus the tuned policies. |
 | `src/lib/clientIp.ts` | Spoof-resistant client IP for IP-keyed limits. |
@@ -87,11 +95,13 @@ or it overflows once `q/b` gets large.
 | `src/lib/apiError.ts` | Maps thrown errors to HTTP status codes; origin check. |
 | `src/app/layout.tsx` | Document shell only — `<html>`/`<body>`. No header, deliberately. |
 | `src/app/page.tsx` | Landing page. Outside `(app)`, so it gets none of the app chrome. |
-| `src/app/signin/` | Sign in / sign up. Outside `(app)`; wears the landing theme. |
-| `src/app/actions.ts` | `signInAction` / `signOutAction`. Shared across both groups. |
+| `src/app/signin/` | Sign in / sign up. Outside `(app)`, so it gets the minimal header. |
+| `src/app/actions.ts` | `signInAction` (Google) / `signOutAction` / `credentialsAction` (email+password). Shared across both groups. |
+| `src/components/SignInForm.tsx` | Client component: email/password fields, hCaptcha widget, inline errors via `useActionState`. |
+| `src/app/signin/reset/` | "Forgot password?" — honest placeholder; no email infra exists to send a reset link. |
 | `src/app/(app)/layout.tsx` | The signed-in chrome: header, balance, nav, footer. |
 | `src/app/` | Next app router — see routes below. |
-| `src/components/` | Shared UI: `MarketCard`, `ProbabilityBar`, `ProbabilityChart`, `Sparkline`, `TradeForm`. |
+| `src/components/` | Shared UI: `MarketCard`, `DeltaChip`, `ProbabilityBar`, `ProbabilityChart`, `Sparkline`, `StatusPill`, `TradeForm`. |
 | `prisma/seed.ts` | Demo markets with simulated trading history. |
 | `prisma/schema.prisma` | Data model. |
 
@@ -99,16 +109,19 @@ or it overflows once `q/b` gets large.
 
 | Path | What |
 |---|---|
-| `/` | **Landing page.** The pitch, own warm theme. Redirects to `/markets` if signed in. |
-| `/markets` | Market list (card grid). Readable signed out. Home once you have an account. |
-| `/markets/[slug]` | Detail: chart, rules, trade form, your position, activity. |
+| `/` | **Landing page.** The pitch. Redirects to `/markets` if signed in. |
+| `/markets` | Market list (card grid), `?category=` filter. Readable signed out. Home once you have an account. |
+| `/markets/[slug]` | Detail: chart, rules, trade ticket, your position, activity. `?side=YES\|NO` preselects the ticket. |
 | `/leaderboard` | Ranked traders. Public. |
 | `/portfolio` | Your holdings, marked to market. Requires sign-in. |
 | `/admin`, `/admin/new` | Create markets, settle them. Admin only. |
-| `/signin` | Google sign-in. Landing theme. `?intent=signup` only changes the wording. |
+| `/signin` | Google **and** email/password sign-in / sign-up. `?intent=signup` changes the wording and which credentials path runs. |
+| `/signin/reset` | "Forgot password?" placeholder — reset by email is not wired (no mail sender exists). |
 
-`/` and `/signin` sit outside the `(app)` route group and share the warm landing
-theme; everything else lives inside `(app)`. See "Two layouts" below.
+`/` and `/signin` sit outside the `(app)` route group, so they render without the
+app chrome; everything else lives inside `(app)`. They share the one palette —
+what differs between the two groups is the header, not the colours. See "Two
+layouts" below.
 
 ### Trade service API
 
@@ -189,15 +202,29 @@ only one pays out.
   second sign-in button onto the marketing page, and onto the sign-in page
   itself. Any new *signed-in* route belongs inside `(app)`; the two signed-out
   surfaces stay out of it.
-- **The landing theme is a token override, not a second stylesheet.** `.landing`
-  re-declares `--page`, `--fg`, `--accent` and the rest as warm paper and ink.
-  Because the token *names* are unchanged, `bg-surface` / `text-muted` keep
-  working inside it and shared components like `MarketCard` inherit the warm
-  palette for free. Style the landing with the same utilities as everywhere
-  else; do not reach for hard-coded hex.
-- The landing is deliberately unlike the app: serif display face, cream stock,
-  burnt-orange accent, versus the app's cool dense palette for reading prices.
-  The contrast is intentional, not drift — don't "harmonise" them.
+- **One palette, everywhere.** The landing page used to re-declare the tokens
+  under a `.landing` class as warm paper, serif and burnt orange. That override
+  is gone: the pitch and the app now share the same near-black surfaces, YES
+  green, NO red and blue accent, because crossing from `/` into `/markets` used
+  to read as landing on a different site. Don't reintroduce a per-surface
+  theme; style everything with the same utilities and never reach for
+  hard-coded hex.
+- **Three colour axes, three sets of tokens, kept separate on purpose.**
+  `--yes`/`--no` are the *outcome* (green/red). `--gain`/`--loss` are *profit
+  and loss* — a different thing, since a gain on a NO position is still a gain.
+  `--chart` is the blue every price path is drawn in: the chart line, its
+  gradient, and the card sparklines. The chart is deliberately **not** YES
+  green — a green line reads as "the YES side is winning" whichever way it
+  points, and the probability it plots belongs to neither side. `--accent` is
+  the same blue, for primary actions. Changing one axis must not silently
+  change another.
+- **Market cards are `<article>`, not one big `<a>`.** The Yes/No buttons are
+  links into `/markets/[slug]?side=…`, which preselects the ticket; an anchor
+  cannot contain anchors, so the question carries a stretched
+  `after:absolute after:inset-0` link and the buttons sit above it with
+  `relative`. The buttons deliberately do **not** trade — committing points
+  still happens on the page that shows the rules, never one tap from a
+  scrolling list.
 - `.card-lift` gives a card a 3px rise and a shadow on hover. It is a class
   rather than utilities on each card so the `prefers-reduced-motion` opt-out
   and the `hover: hover` guard live in one place — without the latter, touch
@@ -220,7 +247,22 @@ requireAdmin()  // throws AuthError("FORBIDDEN") → 403
 banEmail(email, { reason, bannedBy })   // also revokes live sessions
 unbanEmail(email)
 isBanned(email)
+
+// Email/password (src/lib/credentials.ts) — the credentials counterpart to the
+// Google wiring. Both throw CredentialsError with a .code the sign-in form maps
+// to an inline field message. Each mints the session itself (see session.ts).
+registerCredentials({ email, password, captchaToken })   // create + sign in
+signInCredentials({ email, password, captchaToken })      // verify + sign in
+// codes: INVALID_EMAIL, WEAK_PASSWORD, EMAIL_TAKEN, INVALID_CREDENTIALS,
+//        USE_GOOGLE, BANNED, CAPTCHA_FAILED, RATE_LIMITED
 ```
+
+Both credential entry points share one front gate with the Google callback, in
+this order: **captcha → rate limit → ban check**. Captcha first so a script
+cannot burn another user's IP budget without solving one; ban check last so a
+banned user still spends their own token. Admin rights are re-derived from
+`ADMIN_EMAILS` on every sign-in for both providers, so the invariant that
+"removing an address demotes at next login" holds for password accounts too.
 
 ### Rate limiting
 
@@ -250,13 +292,23 @@ are **database-backed, not JWT**: it costs a query per request, but a ban can
 revoke a live session and `isAdmin`/`balance` are never stale. Don't switch to
 the JWT strategy without solving both of those.
 
+This is why email/password does **not** use NextAuth's Credentials provider:
+that provider only issues JWT sessions, which would break both guarantees. The
+password flow instead verifies the hash itself and writes a real `Session` row —
+the same shape the Prisma adapter writes for Google — then sets the exact
+`authjs.session-token` cookie Auth.js reads (`src/lib/session.ts`). `auth()`
+then treats a password session and a Google session identically. The cookie name
+is a hard coupling to `@auth/core`; re-verify it against
+`@auth/core/lib/utils/cookie` after any NextAuth major upgrade.
+
 ## Commands
 
 ```bash
 npm run dev         # dev server
-npm test            # 175 tests: lmsr 21, trade 23, apiSchema 22, authPolicy 20,
+npm test            # 193 tests: lmsr 21, trade 23, apiSchema 22, authPolicy 27,
                     #   apiError 17, rateLimit 16, bans 12, clientIp 12,
-                    #   resolve 11, adminMarkets 11, markets 10; needs the DB up
+                    #   resolve 11, adminMarkets 11, markets 10, password 6,
+                    #   captcha 5; needs the DB up
 npm run build       # prisma generate + next build
 npx tsc --noEmit    # typecheck
 npx prisma generate # regenerate the client after editing schema.prisma
@@ -373,11 +425,30 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
   layer, not the only one.
 - There is no `/api/markets`. Pages are server components reading `markets.ts`
   directly; only the trade form needs HTTP, because it runs in the browser.
-- **"Sign in" and "Sign up" are the same Google flow.** Auth.js registers an
-  unknown Google account on first use, so there is nothing to separate. The
-  landing page shows both buttons because visitors look for the one that matches
-  their situation, and `?intent=signup` changes only the heading and blurb on
-  `/signin`. Don't build a second endpoint for it.
+- **"Sign in" and "Sign up" share one surface, per provider.** For Google there
+  is genuinely one flow — Auth.js registers an unknown account on first use, so
+  nothing separates them. For email/password `?intent=signup` picks which
+  credentials path runs (`registerCredentials` vs `signInCredentials`) but it is
+  still the same page and the same form component; the mode rides in a hidden
+  `mode` field. The landing page shows both framings because visitors look for
+  the one that matches their situation. Don't build separate pages for sign-in
+  vs sign-up.
+- **hCaptcha guards only the email/password form, not Google.** The widget's
+  token is verified server-side in `captcha.ts`; the OAuth redirect is Google's
+  own bot problem. With `HCAPTCHA_SECRET` unset the check is skipped and logged
+  (local dev), mirroring how `clientIp` fails open — but a *network failure*
+  reaching hCaptcha fails **closed**, because there the check was asked for and
+  letting it through would defeat the control. `.env` ships hCaptcha's public
+  test keys, which always solve; swap them for real ones before deploying.
+- **Password reset is not built.** `/signin/reset` is an honest placeholder
+  because there is no mail sender anywhere in the app to deliver a reset link
+  (there is no SMTP/Resend wiring at all). When one is added, that page becomes a
+  token-based reset form; until then it points users at Google or an admin rather
+  than faking a flow that goes nowhere.
+- **scrypt needs its `maxmem` raised.** At N=2¹⁵/r=8 scrypt wants ~32 MB, which
+  is exactly Node's default `maxmem` ceiling, so it throws without the explicit
+  `maxmem` in `password.ts`. The verify path computes `maxmem` from the hash's
+  own stored parameters, so a hash made under heavier settings still verifies.
 - The landing page renders **real markets**, not mock-ups. A landing page for a
   market that shows invented prices is lying about the one thing the product is.
   It shows the first three OPEN markets and drops the whole section when there
@@ -386,11 +457,15 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
   `User.balance` default in `schema.prisma`. Prisma cannot read a TS constant,
   so those two have to be changed together — changing only the constant silently
   affects the profit calculation without changing what new users receive.
-- `/signin` wears the **landing** theme, not the app theme, and lives outside
-  `(app)` for that reason: it is the far side of the landing page's two buttons,
-  and a palette swap mid-flow reads as a broken link. Reaching it from the app
-  header crosses the other way — judged the lesser seam, since sign-up is the
-  volume case.
+- `/signin` lives outside `(app)` so it carries the landing's minimal header
+  rather than the app chrome — a nav offering Leaderboard and a second "Sign in"
+  button is noise on the page whose only job is one button. It is not a palette
+  decision; there is only one palette.
+- The `?category=` on `/markets` is **validated against `listCategories()`**
+  before it is used. An unknown value falls back to showing everything, because
+  a stale or hand-edited link that renders an empty grid looks like a broken
+  site rather than a bad URL. The tabs are plain links, not a client control, so
+  the filter is shareable and works before any JavaScript loads.
 - `actions.ts` sits at `src/app/actions.ts`, not inside `(app)`, because
   `/signin` (outside the group) and `signout-button.tsx` (inside it) both import
   it. Moving it back into `(app)` breaks the sign-in page's import.
@@ -406,6 +481,17 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
   between trades and jump when one lands; a smooth curve draws probabilities the
   market never quoted. The Y axis is pinned to 0–100% for the same reason —
   auto-scaling makes a 48→52% drift look like a collapse.
+- The chart's **range control defaults to "All"** on two counts. Most markets
+  here are younger than a month, and every other range has to read the clock —
+  a `Date.now()` in the server render would disagree with the one at hydration
+  and mismatch the SVG. "All" needs no clock, so first paint is deterministic
+  and the others only run after a click. A range is offered only when the
+  market has more history than it covers; on a young market the control hides
+  entirely. "All" spans first trade → last trade, but a *fixed* range pins the
+  X domain to `[cutoff, now]` and synthesises two points — one carrying the
+  price already in effect when the window opened, one carrying the current
+  price forward — because "the last 7 days" that visibly stops three days ago
+  is lying about recency.
 - The card **sparkline** (`Sparkline.tsx`) is stepAfter too, but its Y window is
   **floored, not pinned**: fitted to the data, never narrower than 30pp. A hard
   0–100 pin in a 32px box renders every real move as a ~5px wiggle (tried it —
@@ -413,12 +499,15 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
   The floor bounds exaggeration at ~3×. Its X axis spans first trade → last
   trade, *not* → now: padding to "now" was also tried, and it crushes the whole
   path into the left edge as soon as a market goes quiet for a few days.
-- **The yes/no pair fails strict CVD checks** — deutan ΔE ≈ 6 (light) and ≈ 4.6
-  (dark) between `--yes` and `--no`, per the dataviz palette validator. Usable
-  only because hue is never the sole encoding, so keep it that way: the bar has
-  fixed order (YES left, NO right) matching the labels under it, the 24h chip
-  carries an arrow + signed number, probabilities are always written as text.
-  Don't add any element where green-vs-rose alone is the answer.
+- **The yes/no pair fails CVD checks** — green against red is the textbook pair
+  a deutan or protan viewer cannot separate. It is a deliberate choice (it is
+  what a prediction market is expected to look like) and it is only safe because
+  hue is never the sole encoding, so keep it that way: the bar has fixed order
+  (YES left, NO right) matching the labels beside it, every side button is
+  captioned "Yes"/"No" in words, the 24h chip carries an arrow + signed number,
+  probabilities are always written as text. Don't add any element where
+  green-vs-red alone is the answer. This is also why the chart is blue rather
+  than green — see the colour-axes note under UI conventions.
 - `listMarkets` fetches price history for **all** listed markets in one query
   and computes `spark`/`delta24h` per market in JS. Fine at this scale; if the
   PricePoint table gets heavy the fix is a windowed query or a cached spark
@@ -439,17 +528,23 @@ be dropped in favour of `--env-file=.env` in the `test` and `db:seed` scripts.
 ## Status
 
 **The MVP is complete and working end to end** — trading, pricing, resolution and
-leaderboard all verified in a browser, not just in tests. 175 tests pass,
-`tsc --noEmit` is clean, `next build` succeeds.
+leaderboard all verified in a browser, not just in tests. Google **and**
+email/password sign-in both verified in a browser (sign-up, sign-out, sign-in
+round-trip). 193 tests pass, `tsc --noEmit` is clean, `next build` succeeds.
 
 Remaining, in order:
 
-1. **Publish the Google consent screen.** Still in Testing mode, so only listed
-   test users can sign in — "open registration" is not actually open yet.
-2. **Rename the OAuth app** from "Trading" to "Outcome"; it is what users see on
-   the consent screen.
+1. ~~**Publish the Google consent screen.**~~ **Done** — moved from Testing to
+   In production (basic scopes only, so no verification review). Anyone with a
+   Google account can now sign in via Google.
+1b. ~~**Set real hCaptcha keys**~~ **Done** — real `HCAPTCHA_SITEKEY`/
+   `HCAPTCHA_SECRET` in `.env`, verified end to end (real widget solves, server
+   `siteverify` accepts, account created). **At deploy**, add the production
+   domain to the sitekey's Hostnames allowlist in the hCaptcha dashboard, or
+   solves fail closed there — `localhost` is already added for local dev.
+2. ~~**Rename the OAuth app** from "Trading" to "Outcome".~~ **Done** — renamed
+   in the Google consent screen; it is what users see there.
 3. **Deploy** (Vercel + Neon/Supabase), with `NEXTAUTH_URL` updated and a second
    authorised redirect URI for the real domain. No deploy notes written yet.
-4. Categories filter on `/markets` (`listCategories` exists, unused).
-5. Prune stale rate-limit buckets on a schedule (`pruneStaleBuckets` exists,
+4. Prune stale rate-limit buckets on a schedule (`pruneStaleBuckets` exists,
    called only from its own test).

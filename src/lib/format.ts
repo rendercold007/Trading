@@ -24,6 +24,21 @@ export function formatPoints(value: number): string {
   });
 }
 
+/**
+ * 12,400 → "12.4k". For dense card footers, where the exact volume is noise
+ * and the reader only wants an order of magnitude. Never use this where the
+ * number is the point — a balance, a cost, a payout — only where it is context.
+ */
+export function formatCompact(value: number): string {
+  const abs = Math.abs(value);
+  if (abs < 1000) return formatPoints(value);
+
+  const [scaled, suffix] = abs < 1_000_000 ? [value / 1000, "k"] : [value / 1_000_000, "m"];
+  // One decimal, but "12.0k" is worse than "12k" — trailing zeros read as
+  // precision that isn't there.
+  return `${Number(scaled.toFixed(1))}${suffix}`;
+}
+
 /** Share counts. Same idea as points but tolerant of small fractions. */
 export function formatShares(value: number): string {
   const rounded = Math.round(value * 100) / 100;

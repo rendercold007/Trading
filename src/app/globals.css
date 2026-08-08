@@ -9,105 +9,95 @@
  * both themes without a single `dark:` variant in the markup. Adding a `dark:`
  * class for colour is almost always a sign something should be a token instead.
  *
- * The landing page re-declares the same token names under `.landing` to get a
- * different look out of the same utilities — see that block below.
+ * There is exactly one palette. The landing page used to re-declare these names
+ * as warm paper and ink; that override is gone and `/` now wears the same cool
+ * blue system as the app, so a visitor crossing from the pitch into the market
+ * list never sees the surface change under them.
  */
 
 :root {
-  --page: #f8fafc;
+  --page: #f4f6f9;
   --surface: #ffffff;
-  --surface-hover: #f8fafc;
-  --fg: #0f172a;
-  --muted: #64748b;
-  --faint: #94a3b8;
-  --border: #e2e8f0;
-  --accent: #2563eb;
+  --surface-hover: #fafbfd;
+  --fg: #0a0f1a;
+  --muted: #566070;
+  --faint: #8a93a3;
+  --border: #e3e8ef;
+  --accent: #1a56db;
   --accent-fg: #ffffff;
 
-  /* YES green / NO rose. Chosen to stay distinguishable for the most common
-     forms of colour blindness — the probability is always written as a number
-     next to the bar, never encoded in colour alone. */
-  --yes: #047857;
-  --yes-soft: #d1fae5;
-  --no: #be123c;
-  --no-soft: #ffe4e6;
+  /**
+   * YES green / NO red.
+   *
+   * This is the classic pair a deutan viewer cannot separate, so the
+   * mitigations elsewhere are load-bearing rather than belt-and-braces: the
+   * probability bar has a fixed order (YES left, NO right) matching the labels
+   * beside it, every side button is captioned in words, the 24h chip carries an
+   * arrow and a signed number, and probabilities are always written as text.
+   * Never add an element where green-versus-red alone is the answer.
+   */
+  --yes: #0d8f4f;
+  --yes-soft: #e3f7ec;
+  --no: #c81e1e;
+  --no-soft: #fdecec;
 
-  --danger: #b91c1c;
+  /**
+   * The price path — chart line, gradient fill and card sparklines.
+   *
+   * Blue rather than the YES green, on purpose. A green line would read as
+   * "the YES side is winning" no matter which way it points; the chart plots a
+   * probability that belongs to neither side, so it gets a colour that belongs
+   * to neither side. It doubles as the reason the accent stays blue: primary
+   * actions and data share one voice, outcomes have their own.
+   */
+  --chart: #1a56db;
+
+  /**
+   * Profit and loss. A different axis from YES/NO — a gain on a NO position is
+   * still a gain — so it gets its own names even though it resolves to the same
+   * two colours. Changing one should not silently change the other.
+   */
+  --gain: #0d8f4f;
+  --loss: #c81e1e;
+
+  --danger: #c81e1e;
 
   /* Shadow cast by a card lifting on hover. A token because it needs a much
      heavier value on a dark page to read as depth at all. */
-  --lift-shadow: rgb(15 23 42 / 0.16);
-
-  --display-family: ui-serif, Georgia, "Times New Roman", serif;
+  --lift-shadow: rgb(10 15 26 / 0.14);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --page: #0a0c10;
-    --surface: #12161d;
-    --surface-hover: #171c25;
-    --fg: #e6e9ee;
-    --muted: #94a3b8;
-    --faint: #64748b;
-    --border: #232a35;
-    --accent: #60a5fa;
-    --accent-fg: #0a0c10;
+    /* Near-black, and close to neutral rather than navy — the saturated blue
+       tint a dark UI usually carries fights with both the green and the blue
+       doing actual work on top of it. Cards sit a hair above the page so the
+       border is a seam, not the only thing holding them together. */
+    --page: #05070a;
+    --surface: #0c0f14;
+    --surface-hover: #12161d;
+    --fg: #e9edf4;
+    --muted: #99a3b3;
+    --faint: #6b7585;
+    --border: #1d222b;
+    --accent: #7aa2ff;
+    --accent-fg: #05070a;
 
-    --yes: #34d399;
-    --yes-soft: #06281f;
-    --no: #fb7185;
-    --no-soft: #2d1218;
+    /* Bright enough to read as lit against near-black; the light theme's
+       green has to stay much darker to clear contrast on white. */
+    --yes: #2ee88f;
+    --yes-soft: #082a1b;
+    --no: #ff6b60;
+    --no-soft: #2c110e;
 
-    --danger: #f87171;
+    --chart: #6ea8ff;
+
+    --gain: #2ee88f;
+    --loss: #ff6b60;
+
+    --danger: #ff6b60;
 
     --lift-shadow: rgb(0 0 0 / 0.55);
-  }
-}
-
-/**
- * Landing theme — warm paper and ink, not the cool slate of the app.
- *
- * The landing page is the one surface a stranger sees before they know what
- * this is, and every other prediction market on the web looks like a terminal:
- * near-black, blue accent, dense tables. This goes the other way — cream stock,
- * warm ink, a burnt-orange accent and a serif display face, closer to an
- * almanac than a trading screen. It is a deliberate contrast with the app
- * itself, which stays cool and dense because that is right for reading prices.
- *
- * Implemented by re-declaring the same token names on a wrapper element, so
- * `bg-surface` / `text-muted` / `border-border` keep working unchanged and
- * shared components (MarketCard) inherit the warm palette for free.
- */
-.landing {
-  --page: #f7f3ec;
-  --surface: #fffdf9;
-  --surface-hover: #fdf8f0;
-  --fg: #1c1917;
-  --muted: #6b6259;
-  --faint: #a39a8f;
-  --border: #e6ddd0;
-  --accent: #b4400f;
-  --accent-fg: #fffdf9;
-
-  --lift-shadow: rgb(66 44 25 / 0.18);
-
-  background: var(--page);
-  color: var(--fg);
-}
-
-@media (prefers-color-scheme: dark) {
-  .landing {
-    --page: #16130f;
-    --surface: #1e1a15;
-    --surface-hover: #262119;
-    --fg: #f0e9df;
-    --muted: #a89e91;
-    --faint: #756b5f;
-    --border: #2e2820;
-    --accent: #f08b4c;
-    --accent-fg: #16130f;
-
-    --lift-shadow: rgb(0 0 0 / 0.6);
   }
 }
 
@@ -125,10 +115,13 @@
   --color-yes-soft: var(--yes-soft);
   --color-no: var(--no);
   --color-no-soft: var(--no-soft);
+  --color-chart: var(--chart);
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
   --color-danger: var(--danger);
 
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: var(--display-family);
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 @layer base {
@@ -141,6 +134,7 @@
     color: var(--fg);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   /* Prices, balances and share counts sit in columns and change in place;
@@ -152,6 +146,24 @@
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+
+  /**
+   * A horizontal strip that scrolls rather than wraps — the category tabs.
+   *
+   * Wrapping the tab row onto a second line pushes the market grid down by a
+   * whole row on a phone, and the tabs are navigation, not content. Scrolling
+   * keeps the grid where it was. The scrollbar itself is hidden because on a
+   * 40px-tall strip it doubles the visual height of the control; the row is
+   * still reachable by swipe, trackpad, and keyboard focus scrolling.
+   */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 
   /**

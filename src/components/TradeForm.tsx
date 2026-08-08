@@ -8,7 +8,7 @@ import type { Outcome } from "@/lib/lmsr";
 import { formatPoints, formatPrice, formatProbability, formatShares } from "@/lib/format";
 
 /**
- * The trade form.
+ * The trade ticket.
  *
  * Buying is sized in **points** and selling in **shares**, because that is how
  * people actually think about each: "put 500 points on yes", but "sell the 200
@@ -27,6 +27,12 @@ interface Props {
   balance: number;
   /** False when the market is closed or the viewer is signed out. */
   canTrade: boolean;
+  /**
+   * Which side to open on. Comes from the `?side=` the market cards link to,
+   * so a reader who picked Yes in the grid doesn't have to pick it again here.
+   * It only sets the initial state — the toggle stays live either way.
+   */
+  initialOutcome?: Outcome;
 }
 
 interface Quote {
@@ -40,10 +46,17 @@ type Side = "BUY" | "SELL";
 
 const QUICK_AMOUNTS = [50, 100, 500, 1000];
 
-export function TradeForm({ marketId, priceYes, positions, balance, canTrade }: Props) {
+export function TradeForm({
+  marketId,
+  priceYes,
+  positions,
+  balance,
+  canTrade,
+  initialOutcome = "YES",
+}: Props) {
   const router = useRouter();
 
-  const [outcome, setOutcome] = useState<Outcome>("YES");
+  const [outcome, setOutcome] = useState<Outcome>(initialOutcome);
   const [side, setSide] = useState<Side>("BUY");
   const [amount, setAmount] = useState("");
 
@@ -171,16 +184,16 @@ export function TradeForm({ marketId, priceYes, positions, balance, canTrade }: 
     submitting || !amountIsValid || overSelling || overSpending || (side === "SELL" && held === 0);
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5">
+    <div className="flex flex-col gap-3.5 rounded-xl border border-border bg-surface p-4">
       {/* Buy / Sell */}
-      <div className="flex gap-1 rounded-lg bg-page p-1" role="tablist">
+      <div className="flex gap-0.5 rounded-lg bg-page p-0.5" role="tablist">
         {(["BUY", "SELL"] as const).map((s) => (
           <button
             key={s}
             role="tab"
             aria-selected={side === s}
             onClick={() => setSide(s)}
-            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex-1 rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors ${
               side === s ? "bg-surface text-fg shadow-sm" : "text-muted hover:text-fg"
             }`}
           >
@@ -207,11 +220,11 @@ export function TradeForm({ marketId, priceYes, positions, balance, canTrade }: 
 
       {/* Amount */}
       <div className="flex flex-col gap-2">
-        <label htmlFor="trade-amount" className="flex items-baseline justify-between text-xs">
-          <span className="font-medium text-muted">
+        <label htmlFor="trade-amount" className="flex items-baseline justify-between text-[11px]">
+          <span className="font-medium uppercase tracking-wider text-faint">
             {side === "BUY" ? "Points to spend" : "Shares to sell"}
           </span>
-          <span className="tabular text-faint">
+          <span className="tabular text-muted">
             {side === "BUY"
               ? `${formatPoints(balance)} available`
               : `${formatShares(held)} held`}
@@ -227,11 +240,11 @@ export function TradeForm({ marketId, priceYes, positions, balance, canTrade }: 
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="0"
-          className="tabular w-full rounded-lg border border-border bg-page px-3 py-2 text-lg
-                     outline-none focus:border-accent"
+          className="tabular w-full rounded-lg border border-border bg-page px-3 py-2.5 text-xl
+                     font-semibold outline-none transition-colors focus:border-accent"
         />
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {side === "BUY"
             ? QUICK_AMOUNTS.filter((v) => v <= balance).map((v) => (
                 <QuickButton key={v} onClick={() => setAmount(String(v))}>
@@ -259,7 +272,7 @@ export function TradeForm({ marketId, priceYes, positions, balance, canTrade }: 
       )}
 
       {quote && !overSelling && !overSpending && (
-        <dl className="flex flex-col gap-1.5 rounded-lg bg-page p-3 text-xs">
+        <dl className="flex flex-col gap-1.5 rounded-lg border border-border bg-page p-3 text-xs">
           <Row
             label={side === "BUY" ? "You get" : "You receive"}
             value={
@@ -291,15 +304,16 @@ export function TradeForm({ marketId, priceYes, positions, balance, canTrade }: 
       <button
         onClick={submit}
         disabled={disabled}
-        className={`w-full rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity
+        className={`w-full rounded-lg px-4 py-3 text-sm font-semibold text-accent-fg
+                    transition-opacity hover:opacity-90
                     disabled:cursor-not-allowed disabled:opacity-40
-                    ${outcome === "YES" ? "bg-yes text-white" : "bg-no text-white"}`}
+                    ${outcome === "YES" ? "bg-yes" : "bg-no"}`}
       >
         {submitting
           ? "Working…"
           : side === "BUY"
-            ? `Buy ${outcome}`
-            : `Sell ${outcome}`}
+            ? `Buy ${outcome === "YES" ? "Yes" : "No"}`
+            : `Sell ${outcome === "YES" ? "Yes" : "No"}`}
       </button>
 
       <p className="text-[11px] leading-relaxed text-faint">
@@ -322,21 +336,25 @@ function OutcomeButton({
   onSelect: () => void;
 }) {
   const yes = outcome === "YES";
+
   return (
     <button
       onClick={onSelect}
       aria-pressed={selected}
-      className={`flex flex-col items-center gap-0.5 rounded-lg border px-3 py-2.5 transition-colors
+      className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5
+        text-[13px] font-semibold transition-colors
         ${
           selected
             ? yes
-              ? "border-yes bg-yes-soft text-yes"
-              : "border-no bg-no-soft text-no"
-            : "border-border text-muted hover:border-faint"
+              ? "border-yes bg-yes text-accent-fg"
+              : "border-no bg-no text-accent-fg"
+            : yes
+              ? "border-transparent bg-yes-soft text-yes hover:border-yes"
+              : "border-transparent bg-no-soft text-no hover:border-no"
         }`}
     >
-      <span className="text-sm font-semibold">{outcome}</span>
-      <span className="tabular text-xs">{formatPrice(price)}</span>
+      <span>{yes ? "Yes" : "No"}</span>
+      <span className="tabular font-normal opacity-90">{formatPrice(price)}</span>
     </button>
   );
 }
@@ -345,7 +363,7 @@ function QuickButton({ children, onClick }: { children: React.ReactNode; onClick
   return (
     <button
       onClick={onClick}
-      className="rounded-md border border-border px-2.5 py-1 text-xs text-muted
+      className="rounded-md border border-border px-2.5 py-1 text-[11px] font-medium text-muted
                  transition-colors hover:border-faint hover:text-fg"
     >
       {children}
@@ -365,7 +383,7 @@ function Row({
   return (
     <div className="flex items-baseline justify-between gap-2">
       <dt className="text-muted">{label}</dt>
-      <dd className={`tabular ${emphasis ? "font-semibold text-yes" : "text-fg"}`}>{value}</dd>
+      <dd className={`tabular ${emphasis ? "font-semibold text-gain" : "text-fg"}`}>{value}</dd>
     </div>
   );
 }
@@ -378,9 +396,9 @@ function Note({
   children: React.ReactNode;
 }) {
   const styles = {
-    ok: "border-yes/40 bg-yes-soft text-yes",
+    ok: "border-gain/30 bg-gain/10 text-gain",
     warn: "border-border bg-page text-muted",
-    error: "border-danger/40 bg-no-soft text-danger",
+    error: "border-danger/30 bg-danger/10 text-danger",
     muted: "border-border bg-page text-muted",
   }[tone];
 

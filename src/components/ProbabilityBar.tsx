@@ -6,10 +6,10 @@ import { formatProbability } from "@/lib/format";
  * Two solid segments rather than a fill over a track: this is a two-sided
  * market, not progress toward completion, and the NO side is a position
  * someone holds, not the absence of YES. Identity is carried by fixed order —
- * YES always left, NO always right, matching the price labels rendered under
- * it — never by hue alone (the green/rose pair is close for deutan viewers;
- * see CLAUDE.md). The gap between segments is a deliberate spacer, and the
- * number is always written next to the bar.
+ * YES always left, NO always right, matching the price labels rendered beside
+ * it — never by hue alone, even though the blue/red pair separates far better
+ * than the green/rose one it replaced. The gap between segments is a
+ * deliberate spacer, and the number is always written next to the bar.
  */
 export function ProbabilityBar({
   priceYes,

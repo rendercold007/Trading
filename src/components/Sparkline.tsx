@@ -17,7 +17,9 @@ import type { PricePoint } from "@/lib/markets";
  * real move fills the box.
  *
  * Colour comes from `currentColor`, so the caller sets it with a text token
- * (`text-yes` for a live market, `text-faint` for a settled one). The line is
+ * (`text-chart` — the blue every price path shares, deliberately not the YES
+ * green — for a live market, `text-faint` for a settled one, which is what
+ * greys out a card that has stopped moving). The line is
  * never the only encoding — the card states the probability and the 24h move
  * as text right next to it.
  */

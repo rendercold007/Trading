@@ -34,7 +34,7 @@ export default async function PortfolioPage() {
         <Stat
           label="Unrealised"
           value={`${positionValue - totalCost >= 0 ? "+" : ""}${formatPoints(positionValue - totalCost)}`}
-          tone={positionValue - totalCost >= 0 ? "yes" : "no"}
+          tone={positionValue - totalCost >= 0 ? "gain" : "loss"}
         />
       </section>
 
@@ -82,7 +82,9 @@ export default async function PortfolioPage() {
                     {formatPoints(holding.markValue)} pts
                   </span>
                   <span
-                    className={`tabular ${holding.unrealised >= 0 ? "text-yes" : "text-no"}`}
+                    className={`tabular font-medium ${
+                      holding.unrealised >= 0 ? "text-gain" : "text-loss"
+                    }`}
                   >
                     {holding.unrealised >= 0 ? "+" : ""}
                     {formatPoints(holding.unrealised)}
@@ -113,14 +115,15 @@ function Stat({
   label: string;
   value: string;
   emphasis?: boolean;
-  tone?: "yes" | "no";
+  /** Profit and loss, which is a different axis from YES/NO — hence its own tokens. */
+  tone?: "gain" | "loss";
 }) {
   return (
     <div className="flex flex-col gap-1 rounded-xl border border-border bg-surface p-3">
-      <span className="text-xs text-muted">{label}</span>
+      <span className="text-[11px] font-medium uppercase tracking-wider text-faint">{label}</span>
       <span
         className={`tabular font-semibold ${emphasis ? "text-xl" : "text-base"} ${
-          tone === "yes" ? "text-yes" : tone === "no" ? "text-no" : ""
+          tone === "gain" ? "text-gain" : tone === "loss" ? "text-loss" : ""
         }`}
       >
         {value}

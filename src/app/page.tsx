@@ -10,13 +10,16 @@ import { STARTING_BALANCE_LABEL } from "@/lib/marketConstants";
  * Landing page — the pitch, for people who have never been here.
  *
  * Sits outside the `(app)` route group so it gets none of the signed-in
- * chrome, and wraps everything in `.landing`, which re-declares the colour
- * tokens as warm paper and ink (see `globals.css`). Anyone already signed in
- * is sent straight to the market list: they have read the pitch.
+ * chrome: a Portfolio link and a second sign-in button are noise on a page
+ * whose job is one decision. It does, however, wear the *same palette* as the
+ * app. An earlier version re-skinned this page as warm paper and ink, which
+ * looked good on its own and then made the jump into `/markets` read as a
+ * different site. One system, one set of tokens.
  *
  * Real markets are rendered here rather than mock-ups. A landing page for a
  * market that shows invented prices is lying about the one thing the product
- * is, and `MarketCard` already renders live data correctly.
+ * is, and `MarketCard` already renders live data correctly. Anyone already
+ * signed in is sent straight to the market list: they have read the pitch.
  */
 
 // Shows live prices, and branches on session state. Never cache it.
@@ -30,55 +33,61 @@ export default async function LandingPage() {
   const featured = markets.filter((m) => m.status === "OPEN").slice(0, 3);
 
   return (
-    <div className="landing min-h-dvh">
-      <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-6">
-        <span className="font-display text-lg font-semibold tracking-tight text-fg">
-          Outcome
-        </span>
+    <div className="min-h-dvh">
+      <header className="sticky top-0 z-10 border-b border-border bg-page/85 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2.5">
+          <span className="text-[15px] font-bold tracking-tight text-fg">Outcome</span>
 
-        <nav className="flex items-center gap-2 text-sm">
-          <Link
-            href="/signin"
-            className="rounded-lg px-3.5 py-2 font-medium text-muted transition-colors hover:text-fg"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/signin?intent=signup"
-            className="rounded-lg bg-accent px-3.5 py-2 font-medium text-accent-fg transition-opacity hover:opacity-90"
-          >
-            Sign up
-          </Link>
-        </nav>
+          <nav className="flex items-center gap-1.5 text-[13px]">
+            <Link
+              href="/markets"
+              className="rounded-md px-2.5 py-1.5 font-medium text-muted transition-colors hover:bg-surface hover:text-fg"
+            >
+              Markets
+            </Link>
+            <Link
+              href="/signin"
+              className="rounded-md px-2.5 py-1.5 font-medium text-muted transition-colors hover:bg-surface hover:text-fg"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/signin?intent=signup"
+              className="rounded-lg bg-accent px-3.5 py-1.5 font-semibold text-accent-fg transition-opacity hover:opacity-90"
+            >
+              Sign up
+            </Link>
+          </nav>
+        </div>
       </header>
 
       <main>
         {/* Hero */}
-        <section className="mx-auto max-w-6xl px-6 pb-20 pt-12 sm:pt-20">
-          <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-accent">
+        <section className="mx-auto max-w-6xl px-4 pb-16 pt-14 sm:pt-24">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
             Open to anyone · Play money only
           </p>
 
-          <h1 className="mt-6 max-w-3xl font-display text-5xl leading-[1.05] tracking-tight text-fg sm:text-6xl">
+          <h1 className="mt-5 max-w-3xl text-[44px] font-bold leading-[1.04] tracking-[-0.03em] text-fg sm:text-6xl">
             How sure are you, really?
           </h1>
 
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted">
-            Trade YES or NO on questions about the future. The price{" "}
-            <em className="font-display text-fg">is</em> the probability — and it moves
-            when you disagree with it loudly enough. Play money, real calibration.
+          <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
+            Trade Yes or No on questions about the future. The price{" "}
+            <em className="font-semibold not-italic text-fg">is</em> the probability — and
+            it moves when you disagree with it loudly enough. Play money, real calibration.
           </p>
 
-          <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="mt-8 flex flex-col gap-2.5 sm:flex-row sm:items-center">
             <Link
               href="/signin?intent=signup"
-              className="rounded-lg bg-accent px-5 py-3 text-center text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
+              className="rounded-lg bg-accent px-5 py-3 text-center text-sm font-semibold text-accent-fg transition-opacity hover:opacity-90"
             >
               Start with {STARTING_BALANCE_LABEL} points
             </Link>
             <Link
               href="/markets"
-              className="rounded-lg border border-border px-5 py-3 text-center text-sm font-medium text-fg transition-colors hover:border-faint hover:bg-surface-hover"
+              className="rounded-lg border border-border bg-surface px-5 py-3 text-center text-sm font-semibold text-fg transition-colors hover:border-faint hover:bg-surface-hover"
             >
               Browse markets
             </Link>
@@ -88,20 +97,20 @@ export default async function LandingPage() {
         {/* Live markets. Skipped entirely rather than showing an empty shelf. */}
         {featured.length > 0 && (
           <section className="border-t border-border">
-            <div className="mx-auto max-w-6xl px-6 py-16">
+            <div className="mx-auto max-w-6xl px-4 py-14">
               <div className="flex items-baseline justify-between gap-4">
-                <h2 className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-faint">
                   Trading now
                 </h2>
                 <Link
                   href="/markets"
-                  className="text-sm font-medium text-accent hover:underline"
+                  className="text-[13px] font-semibold text-accent hover:underline"
                 >
-                  All markets
+                  All markets →
                 </Link>
               </div>
 
-              <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {featured.map((market) => (
                   <MarketCard key={market.id} market={market} />
                 ))}
@@ -112,12 +121,12 @@ export default async function LandingPage() {
 
         {/* How it works */}
         <section className="border-t border-border">
-          <div className="mx-auto max-w-6xl px-6 py-16">
-            <h2 className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted">
+          <div className="mx-auto max-w-6xl px-4 py-14">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-faint">
               How it works
             </h2>
 
-            <ol className="mt-10 grid grid-cols-1 gap-10 sm:grid-cols-3">
+            <ol className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-3">
               <Step
                 n="01"
                 title="Pick a question"
@@ -126,7 +135,7 @@ export default async function LandingPage() {
               <Step
                 n="02"
                 title="Take a side"
-                body="Buy YES or NO at the quoted price. Each share pays 1 point if your side is right and nothing if it isn't. Sell back any time before close."
+                body="Buy Yes or No at the quoted price. Each share pays 1 point if your side is right and nothing if it isn't. Sell back any time before close."
               />
               <Step
                 n="03"
@@ -139,12 +148,12 @@ export default async function LandingPage() {
 
         {/* The legal position, stated plainly rather than buried in a footer. */}
         <section className="border-t border-border">
-          <div className="mx-auto max-w-6xl px-6 py-16">
+          <div className="mx-auto max-w-6xl px-4 py-14">
             <div className="max-w-2xl">
-              <h2 className="font-display text-2xl tracking-tight text-fg">
+              <h2 className="text-2xl font-bold tracking-tight text-fg">
                 Points, and only points.
               </h2>
-              <p className="mt-4 text-sm leading-relaxed text-muted">
+              <p className="mt-3 text-sm leading-relaxed text-muted">
                 There is no deposit, no withdrawal, no cash-out and no prize. Points
                 cannot be bought or exchanged for anything, and the site never touches
                 money. The leaderboard is the whole reward — which is rather the point,
@@ -152,7 +161,7 @@ export default async function LandingPage() {
               </p>
               <Link
                 href="/signin?intent=signup"
-                className="mt-8 inline-block rounded-lg bg-accent px-5 py-3 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
+                className="mt-6 inline-block rounded-lg bg-accent px-5 py-3 text-sm font-semibold text-accent-fg transition-opacity hover:opacity-90"
               >
                 Create an account
               </Link>
@@ -162,7 +171,7 @@ export default async function LandingPage() {
       </main>
 
       <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-8 text-xs text-muted sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-7 text-xs text-muted sm:flex-row sm:items-center sm:justify-between">
           <span>
             Play money only. Points have no cash value and cannot be withdrawn.
           </span>
@@ -182,9 +191,9 @@ export default async function LandingPage() {
 
 function Step({ n, title, body }: { n: string; title: string; body: string }) {
   return (
-    <li className="flex flex-col gap-3">
-      <span className="font-display text-3xl text-accent">{n}</span>
-      <h3 className="font-display text-xl tracking-tight text-fg">{title}</h3>
+    <li className="flex flex-col gap-2">
+      <span className="tabular text-sm font-bold text-accent">{n}</span>
+      <h3 className="text-lg font-semibold tracking-tight text-fg">{title}</h3>
       <p className="text-sm leading-relaxed text-muted">{body}</p>
     </li>
   );

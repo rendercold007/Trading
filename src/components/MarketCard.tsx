@@ -1,7 +1,8 @@
 import Link from "next/link";
 
 import { isTradeable, type MarketSummary } from "@/lib/markets";
-import { formatPoints, formatPrice, formatProbability, formatTimeLeft } from "@/lib/format";
+import { formatCompact, formatPrice, formatProbability, formatTimeLeft } from "@/lib/format";
+import { DeltaChip } from "./DeltaChip";
 import { ProbabilityBar } from "./ProbabilityBar";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
@@ -9,15 +10,19 @@ import { StatusPill } from "./StatusPill";
 /**
  * One market in the list grid.
  *
- * The whole card is a single link — a card with several competing click targets
- * is awkward on a phone, and this app is shared by URL, so most first visits are
- * mobile. The YES/NO prices are shown for information, not as buy buttons;
- * committing points is a decision that belongs on the detail page next to the
- * rules, not one tap from a scrolling list.
+ * The card carries two Yes/No price buttons, which are **links into the detail
+ * page with that side preselected** — not one-tap trades. Committing points
+ * still happens next to the rules, on the page that shows them; what the
+ * buttons buy you is that the reader states their side once instead of
+ * arriving at the ticket and picking again. This is why the card is an
+ * `<article>` with a stretched link over the question rather than a single
+ * `<a>` wrapping everything: an anchor cannot contain other anchors, and the
+ * pseudo-element keeps the whole surface clickable anyway.
  *
  * The sparkline and the 24h chip are what make the grid feel alive: they show
  * that prices *move*. Neither is ever the only encoding — the chip pairs an
- * arrow with a signed number, and the probability is always written out.
+ * arrow with a signed number, the buttons are labelled in words, and the
+ * probability is always written out.
  */
 export function MarketCard({ market }: { market: MarketSummary }) {
   const settled = market.status === "RESOLVED" || market.status === "VOIDED";
@@ -25,59 +30,69 @@ export function MarketCard({ market }: { market: MarketSummary }) {
   const isNew = market.status === "OPEN" && market.tradeCount === 0;
 
   return (
-    <Link
-      href={`/markets/${market.slug}`}
-      className="card-lift group flex flex-col gap-4 rounded-xl border border-border bg-surface p-5
-                 hover:bg-surface-hover
-                 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+    <article
+      className="card-lift group relative flex flex-col gap-3 rounded-xl border border-border
+                 bg-surface p-4 hover:bg-surface-hover
+                 focus-within:border-accent"
     >
-      {(market.category || settled || isNew) && (
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-faint">
-            {market.category ?? ""}
+      {/* Rendered even when empty, so cards in a row keep a common baseline. */}
+      <div className="flex h-4 items-center justify-between gap-3">
+        <span className="truncate text-[11px] font-medium uppercase tracking-wider text-faint">
+          {market.category ?? ""}
+        </span>
+        {settled ? (
+          <StatusPill status={market.status} outcome={market.resolvedOutcome} />
+        ) : isNew ? (
+          <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
+            new
           </span>
-          {settled ? (
-            <StatusPill status={market.status} outcome={market.resolvedOutcome} />
-          ) : isNew ? (
-            <span className="shrink-0 rounded-full border border-accent/40 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-accent">
-              new
-            </span>
-          ) : null}
-        </div>
-      )}
+        ) : null}
+      </div>
 
-      <h2 className="text-[15px] font-semibold leading-snug text-fg group-hover:text-accent">
-        {market.question}
+      <h2 className="text-[15px] font-semibold leading-snug tracking-[-0.01em] text-fg">
+        <Link
+          href={`/markets/${market.slug}`}
+          className="line-clamp-2 rounded-sm transition-colors after:absolute after:inset-0 after:content-[''] group-hover:text-accent"
+        >
+          {market.question}
+        </Link>
       </h2>
 
-      <div className="mt-auto flex flex-col gap-2">
+      <div className="mt-auto flex flex-col gap-2.5">
         <div className="flex items-end justify-between gap-3">
           <div className="flex flex-col gap-0.5">
-            <span className="flex items-baseline gap-2">
-              <span className="tabular text-2xl font-semibold text-fg">
+            <span className="flex items-baseline gap-1.5">
+              <span className="tabular text-[28px] font-semibold leading-none tracking-tight text-fg">
                 {formatProbability(market.priceYes)}
               </span>
               {live && market.delta24h !== null && <DeltaChip delta={market.delta24h} />}
             </span>
-            <span className="text-xs text-muted">chance of yes</span>
+            <span className="text-[11px] text-muted">chance of yes</span>
           </div>
-          <Sparkline points={market.spark} className={settled ? "text-faint" : "text-yes"} />
+          <Sparkline points={market.spark} className={settled ? "text-faint" : "text-chart"} />
         </div>
 
-        <ProbabilityBar priceYes={market.priceYes} />
+        <ProbabilityBar priceYes={market.priceYes} size="sm" />
 
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="tabular font-medium text-yes">
-            YES {formatPrice(market.priceYes)}
-          </span>
-          <span className="tabular font-medium text-no">
-            NO {formatPrice(1 - market.priceYes)}
-          </span>
-        </div>
+        {live ? (
+          <div className="grid grid-cols-2 gap-2">
+            <SideLink slug={market.slug} outcome="YES" price={market.priceYes} />
+            <SideLink slug={market.slug} outcome="NO" price={1 - market.priceYes} />
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="tabular font-semibold text-yes">
+              Yes {formatPrice(market.priceYes)}
+            </span>
+            <span className="tabular font-semibold text-no">
+              No {formatPrice(1 - market.priceYes)}
+            </span>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t border-border pt-3 text-xs text-muted">
-        <span className="tabular">{formatPoints(market.volume)} pts volume</span>
+      <div className="flex items-center justify-between gap-2 border-t border-border pt-2.5 text-[11px] text-muted">
+        <span className="tabular">{formatCompact(market.volume)} pts vol</span>
         {market.status === "OPEN" ? (
           <span className="flex items-center gap-1.5">
             {live && <span aria-hidden className="pulse-dot h-1.5 w-1.5 rounded-full bg-yes" />}
@@ -87,31 +102,41 @@ export function MarketCard({ market }: { market: MarketSummary }) {
           <span>closed</span>
         )}
       </div>
-    </Link>
+    </article>
   );
 }
 
 /**
- * 24-hour move, in whole percentage points. Direction is carried three ways —
- * arrow, colour, and the screen-reader text — because the green/rose pair
- * alone is not enough for deutan viewers. A move that rounds to zero renders
- * nothing: a "±0" chip is noise pretending to be signal.
+ * A side button on a card. `relative` is load-bearing: it lifts the link above
+ * the stretched pseudo-element covering the card, so a tap here goes to the
+ * preselected ticket rather than the plain detail page underneath.
+ *
+ * Hover fills the button with its own colour and flips the label to
+ * `accent-fg`, which is the "text on a saturated fill" token and reads
+ * correctly in both themes — white on the light palette's deep blue, near-black
+ * on the dark palette's pale blue.
  */
-function DeltaChip({ delta }: { delta: number }) {
-  const pp = Math.round(Math.abs(delta) * 100);
-  if (pp === 0) return null;
-  const up = delta > 0;
+function SideLink({
+  slug,
+  outcome,
+  price,
+}: {
+  slug: string;
+  outcome: "YES" | "NO";
+  price: number;
+}) {
+  const yes = outcome === "YES";
 
   return (
-    <span
-      className={`tabular inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold
-                  ${up ? "bg-yes-soft text-yes" : "bg-no-soft text-no"}`}
+    <Link
+      href={`/markets/${slug}?side=${outcome}`}
+      className={`relative flex items-center justify-center gap-1.5 rounded-lg px-3 py-2
+                  text-[13px] font-semibold transition-colors hover:text-accent-fg
+                  ${yes ? "bg-yes-soft text-yes hover:bg-yes" : "bg-no-soft text-no hover:bg-no"}`}
     >
-      <span aria-hidden>{up ? "▲" : "▼"}</span>
-      {pp}
-      <span className="sr-only">
-        {up ? "up" : "down"} {pp} percentage points in the last day
-      </span>
-    </span>
+      <span>{yes ? "Yes" : "No"}</span>
+      <span className="tabular">{formatPrice(price)}</span>
+      <span className="sr-only">— buy {outcome} on this market</span>
+    </Link>
   );
 }

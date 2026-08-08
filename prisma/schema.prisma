@@ -28,6 +28,12 @@ model User {
   /// Handle shown on the leaderboard. Defaults to the Google display name.
   handle String? @unique
 
+  /// scrypt hash for email/password accounts, `null` for Google-only ones.
+  /// Two sign-in methods share one User row keyed on `email`; which methods an
+  /// account has is "does it have a passwordHash" and "does it have a Google
+  /// Account row". Never returned to the client.
+  passwordHash String?
+
   /// Spendable points. Locked value in open positions is NOT included here.
   balance Decimal @default(10000) @db.Decimal(18, 4)
 

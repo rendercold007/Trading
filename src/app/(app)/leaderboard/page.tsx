@@ -95,7 +95,7 @@ function Row({
       </Td>
       <Td
         align="right"
-        className={`tabular ${entry.profit > 0 ? "text-yes" : entry.profit < 0 ? "text-no" : "text-muted"}`}
+        className={`tabular ${entry.profit > 0 ? "text-gain" : entry.profit < 0 ? "text-loss" : "text-muted"}`}
       >
         {entry.profit > 0 ? "+" : ""}
         {formatPoints(entry.profit)}

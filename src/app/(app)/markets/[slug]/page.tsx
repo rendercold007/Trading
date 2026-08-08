@@ -4,7 +4,9 @@ import type { Metadata } from "next";
 
 import { currentUser } from "@/lib/auth";
 import { getMarketBySlug, getPositions, isTradeable, recentTrades } from "@/lib/markets";
+import type { Outcome } from "@/lib/lmsr";
 import {
+  formatCompact,
   formatDate,
   formatPoints,
   formatPrice,
@@ -13,6 +15,7 @@ import {
   formatShares,
   formatTimeLeft,
 } from "@/lib/format";
+import { DeltaChip } from "@/components/DeltaChip";
 import { ProbabilityBar } from "@/components/ProbabilityBar";
 import { ProbabilityChart } from "@/components/ProbabilityChart";
 import { StatusPill } from "@/components/StatusPill";
@@ -36,8 +39,14 @@ export async function generateMetadata({
   };
 }
 
-export default async function MarketPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+export default async function MarketPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ side?: string }>;
+}) {
+  const [{ slug }, { side }] = await Promise.all([params, searchParams]);
 
   const market = await getMarketBySlug(slug);
   if (!market) notFound();
@@ -48,45 +57,64 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
 
   const tradeable = isTradeable(market);
 
+  // `?side=` arrives from the Yes/No buttons on a market card. Anything else in
+  // the query string is ignored rather than trusted — it only picks a tab.
+  const initialOutcome: Outcome = side === "NO" ? "NO" : "YES";
+
   return (
-    <div className="flex flex-col gap-6">
-      <Link href="/markets" className="text-sm text-muted transition-colors hover:text-fg">
+    <div className="flex flex-col gap-5">
+      <Link
+        href="/markets"
+        className="text-[13px] text-muted transition-colors hover:text-fg"
+      >
         ← All markets
       </Link>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_340px]">
         {/* Left: the market itself */}
-        <div className="flex flex-col gap-6">
-          <header className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
+          <header className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5">
             <div className="flex items-start justify-between gap-3">
-              <h1 className="text-xl font-semibold leading-snug tracking-tight sm:text-2xl">
-                {market.question}
-              </h1>
+              <div className="flex flex-col gap-1.5">
+                {market.category && (
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-faint">
+                    {market.category}
+                  </span>
+                )}
+                <h1 className="text-xl font-semibold leading-snug tracking-tight sm:text-[26px]">
+                  {market.question}
+                </h1>
+              </div>
               {!tradeable && (
                 <StatusPill status={market.status} outcome={market.resolvedOutcome} />
               )}
             </div>
 
             <div className="flex flex-col gap-2">
-              <div className="flex items-baseline gap-3">
-                <span className="tabular text-4xl font-semibold">
+              <div className="flex items-baseline gap-2.5">
+                <span className="tabular text-[40px] font-semibold leading-none tracking-tight">
                   {formatProbability(market.priceYes)}
                 </span>
                 <span className="text-sm text-muted">chance of yes</span>
+                {tradeable && market.delta24h !== null && (
+                  <DeltaChip delta={market.delta24h} size="md" />
+                )}
               </div>
+
               <ProbabilityBar priceYes={market.priceYes} />
+
               <div className="flex justify-between text-xs">
-                <span className="tabular font-medium text-yes">
-                  YES {formatPrice(market.priceYes)}
+                <span className="tabular font-semibold text-yes">
+                  Yes {formatPrice(market.priceYes)}
                 </span>
-                <span className="tabular font-medium text-no">
-                  NO {formatPrice(1 - market.priceYes)}
+                <span className="tabular font-semibold text-no">
+                  No {formatPrice(1 - market.priceYes)}
                 </span>
               </div>
             </div>
 
-            <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted">
-              <Meta label="Volume" value={`${formatPoints(market.volume)} pts`} />
+            <dl className="flex flex-wrap gap-x-6 gap-y-1 border-t border-border pt-3 text-xs text-muted">
+              <Meta label="Volume" value={`${formatCompact(market.volume)} pts`} />
               <Meta label="Trades" value={String(market.tradeCount)} />
               <Meta
                 label={market.status === "OPEN" ? "Closes" : "Closed"}
@@ -96,7 +124,6 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
                     : formatDate(market.closesAt)
                 }
               />
-              {market.category && <Meta label="Category" value={market.category} />}
             </dl>
           </header>
 
@@ -104,8 +131,8 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
             <section
               className={`flex flex-col gap-2 rounded-xl border p-4 ${
                 market.resolution.outcome === "YES"
-                  ? "border-yes/40 bg-yes-soft"
-                  : "border-no/40 bg-no-soft"
+                  ? "border-yes/30 bg-yes-soft"
+                  : "border-no/30 bg-no-soft"
               }`}
             >
               <h2 className="text-sm font-semibold">
@@ -120,8 +147,9 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
             </section>
           )}
 
-          <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
-            <h2 className="text-sm font-semibold text-muted">Probability over time</h2>
+          {/* The chart owns its own heading, because the range control belongs
+              on the same line as it. */}
+          <section className="rounded-xl border border-border bg-surface p-4">
             <ProbabilityChart history={market.history} />
           </section>
 
@@ -133,7 +161,7 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
           </section>
 
           {trades.length > 0 && (
-            <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">
+            <section className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5">
               <h2 className="text-sm font-semibold">Recent activity</h2>
               <ul className="flex flex-col divide-y divide-border">
                 {trades.map((trade) => (
@@ -142,12 +170,14 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
                     className="flex items-center justify-between gap-3 py-2 text-xs"
                   >
                     <span className="truncate text-muted">
-                      <span className="text-fg">{trade.handle}</span>{" "}
+                      <span className="font-medium text-fg">{trade.handle}</span>{" "}
                       {trade.side === "BUY" ? "bought" : "sold"}{" "}
                       <span
-                        className={trade.outcome === "YES" ? "text-yes" : "text-no"}
+                        className={`font-medium ${
+                          trade.outcome === "YES" ? "text-yes" : "text-no"
+                        }`}
                       >
-                        {formatShares(trade.shares)} {trade.outcome}
+                        {formatShares(trade.shares)} {trade.outcome === "YES" ? "Yes" : "No"}
                       </span>
                     </span>
                     <span className="tabular shrink-0 text-faint">
@@ -161,7 +191,7 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
         </div>
 
         {/* Right: acting on it */}
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-[4.5rem] lg:self-start">
           {user ? (
             <TradeForm
               marketId={market.id}
@@ -169,6 +199,7 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
               positions={positions}
               balance={user.balance}
               canTrade={tradeable}
+              initialOutcome={initialOutcome}
             />
           ) : (
             <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">
@@ -177,7 +208,7 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
               </p>
               <Link
                 href={`/signin?callbackUrl=/markets/${market.slug}`}
-                className="rounded-lg bg-accent px-4 py-2 text-center text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
+                className="rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-accent-fg transition-opacity hover:opacity-90"
               >
                 Sign in with Google
               </Link>
@@ -195,7 +226,8 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
                         position.outcome === "YES" ? "text-yes" : "text-no"
                       }`}
                     >
-                      {formatShares(position.shares)} {position.outcome}
+                      {formatShares(position.shares)}{" "}
+                      {position.outcome === "YES" ? "Yes" : "No"}
                     </span>
                     <span className="tabular text-fg">
                       {formatPoints(position.markValue)} pts
@@ -204,8 +236,8 @@ export default async function MarketPage({ params }: { params: Promise<{ slug: s
                   <div className="flex items-baseline justify-between text-muted">
                     <span>Cost {formatPoints(position.costBasis)} pts</span>
                     <span
-                      className={`tabular ${
-                        position.unrealised >= 0 ? "text-yes" : "text-no"
+                      className={`tabular font-medium ${
+                        position.unrealised >= 0 ? "text-gain" : "text-loss"
                       }`}
                     >
                       {position.unrealised >= 0 ? "+" : ""}

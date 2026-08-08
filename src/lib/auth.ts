@@ -17,7 +17,8 @@ import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 
 import { prisma } from "./db";
-import { handleCandidate, isAdminEmail, normalizeEmail, suffixedHandle } from "./authPolicy";
+import { isAdminEmail, normalizeEmail } from "./authPolicy";
+import { assignHandle } from "./handles";
 import { isBanned } from "./bans";
 import { clientIp } from "./clientIp";
 import { consume } from "./rateLimit";
@@ -32,35 +33,6 @@ declare module "next-auth" {
       balance: number;
     } & DefaultSession["user"];
   }
-}
-
-/** How many `handle-2`, `handle-3`, … attempts before falling back to a random one. */
-const MAX_HANDLE_ATTEMPTS = 5;
-
-/**
- * Assign a unique handle to a freshly created user.
- *
- * `User.handle` is unique, and two people called "Alex Kumar" will collide, so
- * retry with a numeric suffix and fall back to a random one rather than leaving
- * the account handle-less.
- */
-async function assignHandle(userId: string, name: string | null, email: string): Promise<void> {
-  const base = handleCandidate(name, email);
-
-  for (let attempt = 0; attempt < MAX_HANDLE_ATTEMPTS; attempt++) {
-    const handle = attempt === 0 ? base : suffixedHandle(base, attempt);
-    try {
-      await prisma.user.update({ where: { id: userId }, data: { handle } });
-      return;
-    } catch {
-      // Unique violation — try the next suffix.
-    }
-  }
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { handle: suffixedHandle(base, Math.floor(Math.random() * 100_000)) },
-  });
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({

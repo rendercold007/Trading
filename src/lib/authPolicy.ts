@@ -91,3 +91,49 @@ export function suffixedHandle(base: string, attempt: number): string {
   const suffix = `-${attempt + 1}`;
   return base.slice(0, MAX_HANDLE_LENGTH - suffix.length) + suffix;
 }
+
+// ---------------------------------------------------------------------------
+// Email / password credential policy
+//
+// Shape and strength rules for the email/password sign-in flow, kept here with
+// the rest of the pure auth policy so they are unit-testable without a database
+// or a running form. Deliberately lax on email — we do not send mail, so an
+// address only has to be plausibly one, not deliverable — and modest on
+// passwords, because the real multi-accounting defences are the rate limiter
+// and captcha, not password entropy.
+// ---------------------------------------------------------------------------
+
+/** Minimum password length. NIST's floor for user-chosen secrets is 8. */
+export const MIN_PASSWORD_LENGTH = 8;
+/** Cap on password length, so an over-long input cannot burden the KDF. */
+export const MAX_PASSWORD_LENGTH = 200;
+
+/**
+ * Pragmatic email check: one `@`, something on each side, a dot in the domain,
+ * no whitespace, within a sane length. Not RFC 5322 — a full grammar rejects
+ * valid addresses and accepts absurd ones, and since nothing here emails the
+ * address, plausibility is all that is needed.
+ */
+export function isValidEmail(email: string): boolean {
+  const value = normalizeEmail(email);
+  if (value.length === 0 || value.length > 254) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+/**
+ * Validate a proposed password, returning a human-readable reason it was
+ * rejected, or `null` when it is acceptable. A string-or-null result keeps the
+ * caller a one-liner and the message close to the rule it enforces.
+ */
+export function validatePassword(password: unknown): string | null {
+  if (typeof password !== "string" || password.length === 0) {
+    return "Enter a password.";
+  }
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  }
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    return `Password must be at most ${MAX_PASSWORD_LENGTH} characters.`;
+  }
+  return null;
+}

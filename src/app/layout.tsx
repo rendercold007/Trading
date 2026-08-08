@@ -6,12 +6,12 @@ import "./globals.css";
 /**
  * Root layout — document shell only.
  *
- * Deliberately carries no header, nav or footer. Two very different surfaces
- * live under it: the marketing landing page at `/`, which has its own warm
- * theme and its own minimal header, and the app itself under `(app)`, which
- * has the signed-in chrome. Putting the app header here would force it onto
- * the landing page, where a Portfolio link and a second sign-in button make
- * no sense.
+ * Deliberately carries no header, nav or footer. Two surfaces live under it:
+ * the signed-out pages at `/` and `/signin`, which carry a minimal header of
+ * their own, and the app under `(app)`, which has the signed-in chrome.
+ * Putting the app header here would force it onto the landing page, where a
+ * Portfolio link and a second sign-in button make no sense. They share one
+ * palette; what differs is the chrome, not the colours.
  */
 
 export const metadata: Metadata = {

@@ -9,10 +9,14 @@ import {
   canonicalEmail,
   handleCandidate,
   isAdminEmail,
+  isValidEmail,
   normalizeEmail,
   parseAdminEmails,
   suffixedHandle,
+  validatePassword,
   MAX_HANDLE_LENGTH,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
 } from "./authPolicy";
 
 describe("normalizeEmail", () => {
@@ -124,5 +128,44 @@ describe("suffixedHandle", () => {
     const handle = suffixedHandle(long, 1);
     assert.ok(handle.length <= MAX_HANDLE_LENGTH, `got ${handle.length}`);
     assert.ok(handle.endsWith("-2"));
+  });
+});
+
+describe("isValidEmail", () => {
+  it("accepts plausible addresses", () => {
+    for (const email of ["a@b.co", "Alex.Kumar@Example.COM", " user+tag@host.io "]) {
+      assert.equal(isValidEmail(email), true, email);
+    }
+  });
+
+  it("rejects malformed ones", () => {
+    for (const email of ["", "no-at", "a@b", "a@@b.com", "a b@c.com", "a@b .com", "@b.com"]) {
+      assert.equal(isValidEmail(email), false, email);
+    }
+  });
+
+  it("rejects an absurdly long address", () => {
+    assert.equal(isValidEmail("a".repeat(250) + "@b.com"), false);
+  });
+});
+
+describe("validatePassword", () => {
+  it("accepts a password at or above the minimum length", () => {
+    assert.equal(validatePassword("a".repeat(MIN_PASSWORD_LENGTH)), null);
+    assert.equal(validatePassword("correct horse battery"), null);
+  });
+
+  it("rejects an empty or missing password", () => {
+    assert.ok(validatePassword(""));
+    assert.ok(validatePassword(undefined));
+    assert.ok(validatePassword(12345678 as unknown));
+  });
+
+  it("rejects one shorter than the minimum", () => {
+    assert.ok(validatePassword("a".repeat(MIN_PASSWORD_LENGTH - 1)));
+  });
+
+  it("rejects one longer than the maximum", () => {
+    assert.ok(validatePassword("a".repeat(MAX_PASSWORD_LENGTH + 1)));
   });
 });
