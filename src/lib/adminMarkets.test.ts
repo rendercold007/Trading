@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 
 import { PrismaClient } from "@prisma/client";
 
-import { CreateMarketError, createMarket, slugify } from "./adminMarkets";
+import { CreateMarketError, createMarket, deleteMarket, editMarket, slugify } from "./adminMarkets";
 import { loadEnv } from "./loadEnv";
 
 loadEnv();
@@ -138,5 +138,127 @@ describe("createMarket", () => {
         (err: unknown) => err instanceof CreateMarketError && err.code === "INVALID_LIQUIDITY",
       );
     }
+  });
+});
+
+describe("editMarket", () => {
+  const validEdit = (overrides: Record<string, unknown> = {}) => ({
+    question: `Will the ${RUN} edited market read back correctly?`,
+    rules: "Resolves YES if the edited fields are what the database returns. Verified by test.",
+    closesAt: future(),
+    ...overrides,
+  });
+
+  async function makeMarket(): Promise<string> {
+    const creatorId = await makeAdmin();
+    const market = await createMarket(
+      {
+        question: `Will the ${RUN} market start out editable?`,
+        rules: "Resolves YES if it can be edited before any trade lands. Verified by test.",
+        closesAt: future(),
+        creatorId,
+      },
+      prisma,
+    );
+    return market.id;
+  }
+
+  it("rewrites the fields of a market with no trades, keeping the slug", async () => {
+    const marketId = await makeMarket();
+    const before = await prisma.market.findUniqueOrThrow({ where: { id: marketId } });
+
+    const newClose = new Date(Date.now() + 14 * 86_400_000);
+    const result = await editMarket(
+      { marketId, ...validEdit({ closesAt: newClose, category: "Cricket", b: 800 }) },
+      prisma,
+    );
+
+    assert.equal(result.slug, before.slug, "slug is the permanent URL, unchanged by an edit");
+
+    const after = await prisma.market.findUniqueOrThrow({ where: { id: marketId } });
+    assert.match(after.question, /edited market read back correctly/);
+    assert.equal(after.category, "Cricket");
+    assert.equal(after.b.toNumber(), 800);
+    assert.equal(after.closesAt.getTime(), newClose.getTime());
+  });
+
+  it("refuses to edit a market that has already traded", async () => {
+    const marketId = await makeMarket();
+    // Simulate a trade having landed without invoking the full trade service.
+    await prisma.market.update({ where: { id: marketId }, data: { tradeCount: 1 } });
+
+    await assert.rejects(
+      () => editMarket({ marketId, ...validEdit() }, prisma),
+      (err: unknown) => err instanceof CreateMarketError && err.code === "MARKET_HAS_TRADES",
+    );
+  });
+
+  it("refuses to edit a market that is no longer open", async () => {
+    const marketId = await makeMarket();
+    await prisma.market.update({ where: { id: marketId }, data: { status: "CLOSED" } });
+
+    await assert.rejects(
+      () => editMarket({ marketId, ...validEdit() }, prisma),
+      (err: unknown) => err instanceof CreateMarketError && err.code === "MARKET_NOT_EDITABLE",
+    );
+  });
+
+  it("still enforces field validation on edit", async () => {
+    const marketId = await makeMarket();
+    await assert.rejects(
+      () => editMarket({ marketId, ...validEdit({ rules: "too short" }) }, prisma),
+      (err: unknown) => err instanceof CreateMarketError && err.code === "RULES_REQUIRED",
+    );
+  });
+
+  it("reports a missing market rather than throwing something opaque", async () => {
+    await assert.rejects(
+      () => editMarket({ marketId: "does-not-exist", ...validEdit() }, prisma),
+      (err: unknown) => err instanceof CreateMarketError && err.code === "MARKET_NOT_FOUND",
+    );
+  });
+});
+
+describe("deleteMarket", () => {
+  async function makeMarket(): Promise<string> {
+    const creatorId = await makeAdmin();
+    const market = await createMarket(
+      {
+        question: `Will the ${RUN} market be deletable while untraded?`,
+        rules: "Resolves YES if a zero-trade market can be removed outright. Verified by test.",
+        closesAt: future(),
+        creatorId,
+      },
+      prisma,
+    );
+    return market.id;
+  }
+
+  it("removes a market with no trades", async () => {
+    const marketId = await makeMarket();
+    await deleteMarket(marketId, prisma);
+
+    const row = await prisma.market.findUnique({ where: { id: marketId } });
+    assert.equal(row, null, "the market row is gone");
+  });
+
+  it("refuses to delete a market that has traded, leaving it intact", async () => {
+    const marketId = await makeMarket();
+    await prisma.market.update({ where: { id: marketId }, data: { tradeCount: 1 } });
+
+    await assert.rejects(
+      () => deleteMarket(marketId, prisma),
+      (err: unknown) => err instanceof CreateMarketError && err.code === "MARKET_HAS_TRADES",
+    );
+
+    const row = await prisma.market.findUnique({ where: { id: marketId } });
+    assert.ok(row, "the market must survive a refused delete");
+  });
+
+  it("reports a missing market rather than throwing something opaque", async () => {
+    await assert.rejects(
+      () => deleteMarket("does-not-exist", prisma),
+      (err: unknown) => err instanceof CreateMarketError && err.code === "MARKET_NOT_FOUND",
+    );
   });
 });

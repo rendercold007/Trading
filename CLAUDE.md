@@ -86,7 +86,7 @@ or it overflows once `q/b` gets large.
 | `src/lib/db.ts` | Prisma client singleton (hot-reload safe). |
 | `src/lib/loadEnv.ts` | Reads `.env` for scripts run outside Next. No-op under Next. |
 | `src/lib/resolve.ts` | Settlement: `resolveMarket`, `voidMarket`, `closeMarket`. Pays out. |
-| `src/lib/adminMarkets.ts` | `createMarket` + `slugify`. Admin-only by policy. |
+| `src/lib/adminMarkets.ts` | `createMarket`, `editMarket`, `deleteMarket` + `slugify`. Admin-only by policy. Edit/delete only while `tradeCount === 0`. |
 | `src/lib/markets.ts` | **Read-only** market queries for the UI. Decimal→number here. |
 | `src/lib/leaderboard.ts` | Leaderboard ranking and portfolio aggregates. |
 | `src/lib/format.ts` | Display formatting. Presentational rounding only. |
@@ -114,7 +114,7 @@ or it overflows once `q/b` gets large.
 | `/markets/[slug]` | Detail: chart, rules, trade ticket, your position, activity. `?side=YES\|NO` preselects the ticket. |
 | `/leaderboard` | Ranked traders. Public. |
 | `/portfolio` | Your holdings, marked to market. Requires sign-in. |
-| `/admin`, `/admin/new` | Create markets, settle them. Admin only. |
+| `/admin`, `/admin/new`, `/admin/edit/[slug]` | Create, edit (zero-trade only), settle markets. Admin only. |
 | `/signin` | Google **and** email/password sign-in / sign-up. `?intent=signup` changes the wording and which credentials path runs. |
 | `/signin/reset` | "Forgot password?" placeholder — reset by email is not wired (no mail sender exists). |
 
@@ -180,9 +180,17 @@ resolveMarket({ marketId, outcome, reason, resolvedById })  // pays 1 pt per win
 voidMarket({ marketId, reason, resolvedById })              // refunds net cost basis
 closeMarket(marketId)                                       // halt trading, don't settle
 createMarket({ question, rules, category, closesAt, b, creatorId })
+editMarket({ marketId, question, rules, category, closesAt, b })  // zero-trade only
+deleteMarket(marketId)                                      // zero-trade only; cascades
 ```
 
-Failures throw `ResolveError` / `CreateMarketError` with a `code`. Settlement
+Failures throw `ResolveError` / `CreateMarketError` with a `code`.
+`editMarket`/`deleteMarket` are the escape hatch for a setup mistake: both take
+the same `FOR UPDATE` lock as settlement and refuse once `tradeCount > 0`
+(`MARKET_HAS_TRADES`), because a market's question, rules and close date are the
+terms of a bet — frozen the moment anyone trades. Edit additionally requires
+status `OPEN` (`MARKET_NOT_EDITABLE`) and keeps the slug (the permanent URL).
+The UI surfaces Edit/Delete on the admin dashboard only for zero-trade markets. Settlement
 **mints points**, so `ALREADY_SETTLED` is the most important guard in the
 codebase — it is a `FOR UPDATE` lock plus a status re-read *inside* the
 transaction, and there is a test firing two resolutions concurrently to prove
@@ -305,9 +313,9 @@ is a hard coupling to `@auth/core`; re-verify it against
 
 ```bash
 npm run dev         # dev server
-npm test            # 193 tests: lmsr 21, trade 23, apiSchema 22, authPolicy 27,
+npm test            # 201 tests: lmsr 21, trade 23, apiSchema 22, authPolicy 27,
                     #   apiError 17, rateLimit 16, bans 12, clientIp 12,
-                    #   resolve 11, adminMarkets 11, markets 10, password 6,
+                    #   resolve 11, adminMarkets 19, markets 10, password 6,
                     #   captcha 5; needs the DB up
 npm run build       # prisma generate + next build
 npx tsc --noEmit    # typecheck

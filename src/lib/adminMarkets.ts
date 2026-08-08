@@ -15,7 +15,12 @@ export type CreateMarketErrorCode =
   | "RULES_REQUIRED"
   | "CLOSES_IN_PAST"
   | "INVALID_LIQUIDITY"
-  | "SLUG_TAKEN";
+  | "SLUG_TAKEN"
+  // Edit / delete guards. A market's terms are the terms of a bet: once anyone
+  // has traded, they are frozen. These fire when that invariant would be broken.
+  | "MARKET_NOT_FOUND"
+  | "MARKET_NOT_EDITABLE"
+  | "MARKET_HAS_TRADES";
 
 export class CreateMarketError extends Error {
   readonly code: CreateMarketErrorCode;
@@ -53,7 +58,8 @@ export function slugify(question: string): string {
   return slug.length >= 3 ? slug : "market";
 }
 
-export interface CreateMarketInput {
+/** Fields common to creating and editing a market. */
+interface MarketFields {
   question: string;
   rules: string;
   category?: string | null;
@@ -61,20 +67,21 @@ export interface CreateMarketInput {
   closesAt: Date;
   /** LMSR liquidity. Defaults to 500. */
   b?: number;
-  creatorId: string;
 }
 
 /**
- * Create a market.
+ * Validate and normalise the editable market fields, shared by create and edit.
  *
- * Validation is deliberately strict about rules and close time: a market with
- * vague rules or a close date in the past is worse than no market, because
- * people will have traded on it before anyone notices.
+ * Deliberately strict about rules and close time: a market with vague rules or a
+ * close date in the past is worse than no market, because people will have
+ * traded on it before anyone notices.
  */
-export async function createMarket(
-  input: CreateMarketInput,
-  db: PrismaClient = defaultPrisma,
-): Promise<{ id: string; slug: string }> {
+function validateMarketFields(input: MarketFields): {
+  question: string;
+  rules: string;
+  category: string | null;
+  b: number;
+} {
   const question = input.question.trim();
   const rules = input.rules.trim();
   const category = input.category?.trim() || null;
@@ -109,6 +116,22 @@ export async function createMarket(
     );
   }
 
+  return { question, rules, category, b };
+}
+
+export interface CreateMarketInput extends MarketFields {
+  creatorId: string;
+}
+
+/**
+ * Create a market.
+ */
+export async function createMarket(
+  input: CreateMarketInput,
+  db: PrismaClient = defaultPrisma,
+): Promise<{ id: string; slug: string }> {
+  const { question, rules, category, b } = validateMarketFields(input);
+
   const base = slugify(question);
 
   // Retry on slug collision rather than pre-checking: a pre-check races, the
@@ -141,4 +164,102 @@ export async function createMarket(
     "Could not find a free URL for this question. Try rewording it.",
     "question",
   );
+}
+
+export interface EditMarketInput extends MarketFields {
+  marketId: string;
+}
+
+/**
+ * Edit a market that has not traded yet — fixing a typo or a wrong close date
+ * before anyone has taken a position on it.
+ *
+ * Guarded on `tradeCount === 0` *inside* a `FOR UPDATE` transaction, exactly
+ * like settlement: the check and the write must see the same locked row, or a
+ * trade landing between them could silently rewrite the terms of a live bet.
+ * `tradeCount === 0` also means `qYes`/`qNo` are still 0, so changing `b` is
+ * safe. The slug is intentionally left untouched — it is the market's permanent
+ * URL, and regenerating it would break any link already shared.
+ */
+export async function editMarket(
+  input: EditMarketInput,
+  db: PrismaClient = defaultPrisma,
+): Promise<{ id: string; slug: string }> {
+  const { question, rules, category, b } = validateMarketFields(input);
+
+  return db.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "Market" WHERE id = ${input.marketId} FOR UPDATE
+    `;
+    if (locked.length === 0) {
+      throw new CreateMarketError("MARKET_NOT_FOUND", "That market no longer exists.");
+    }
+
+    const market = await tx.market.findUniqueOrThrow({
+      where: { id: input.marketId },
+      select: { status: true, tradeCount: true },
+    });
+
+    if (market.status !== "OPEN") {
+      throw new CreateMarketError(
+        "MARKET_NOT_EDITABLE",
+        "Only an open market can be edited; this one is already closed or settled.",
+      );
+    }
+    if (market.tradeCount > 0) {
+      throw new CreateMarketError(
+        "MARKET_HAS_TRADES",
+        "This market has trades, so its terms are locked — editing now would change a bet people already took.",
+      );
+    }
+
+    return tx.market.update({
+      where: { id: input.marketId },
+      data: {
+        question,
+        rules,
+        category,
+        closesAt: input.closesAt,
+        b: new Prisma.Decimal(b.toFixed(4)),
+      },
+      select: { id: true, slug: true },
+    });
+  });
+}
+
+/**
+ * Delete a market that has not traded yet — removing a setup mistake outright
+ * rather than leaving it closed-but-visible.
+ *
+ * The same zero-trade guard under the same lock. `Trade` is an immutable ledger,
+ * so a market anyone has traded can never be deleted (close or resolve it
+ * instead); with no trades there is nothing to preserve, and the schema's
+ * cascade clears any Position/PricePoint/Resolution rows along with it.
+ */
+export async function deleteMarket(
+  marketId: string,
+  db: PrismaClient = defaultPrisma,
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "Market" WHERE id = ${marketId} FOR UPDATE
+    `;
+    if (locked.length === 0) {
+      throw new CreateMarketError("MARKET_NOT_FOUND", "That market no longer exists.");
+    }
+
+    const market = await tx.market.findUniqueOrThrow({
+      where: { id: marketId },
+      select: { tradeCount: true },
+    });
+
+    if (market.tradeCount > 0) {
+      throw new CreateMarketError(
+        "MARKET_HAS_TRADES",
+        "This market has trades and cannot be deleted — the ledger is permanent. Close or resolve it instead.",
+      );
+    }
+
+    await tx.market.delete({ where: { id: marketId } });
+  });
 }

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAdmin } from "@/lib/auth";
-import { createMarket, CreateMarketError } from "@/lib/adminMarkets";
+import { createMarket, editMarket, deleteMarket, CreateMarketError } from "@/lib/adminMarkets";
 import { closeMarket, resolveMarket, voidMarket, ResolveError } from "@/lib/resolve";
 
 /**
@@ -70,6 +70,50 @@ export async function createMarketAction(
   revalidatePath("/");
   revalidatePath("/admin");
   redirect(`/markets/${slug}`);
+}
+
+export async function editMarketAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  let slug: string;
+  try {
+    const closesAtRaw = String(formData.get("closesAt") ?? "");
+    const closesAt = new Date(closesAtRaw);
+    if (Number.isNaN(closesAt.getTime())) {
+      return { error: "Pick a valid close date and time.", field: "closesAt" };
+    }
+
+    const b = Number(String(formData.get("b") ?? "500"));
+
+    const market = await editMarket({
+      marketId: String(formData.get("marketId") ?? ""),
+      question: String(formData.get("question") ?? ""),
+      rules: String(formData.get("rules") ?? ""),
+      category: String(formData.get("category") ?? "") || null,
+      closesAt,
+      b,
+    });
+    slug = market.slug;
+  } catch (err) {
+    return toState(err);
+  }
+
+  // Outside the try: `redirect` throws to navigate, so catching it here would
+  // swallow the navigation and report it as an error.
+  revalidatePath("/");
+  revalidatePath("/admin");
+  revalidatePath(`/markets/${slug}`);
+  redirect(`/markets/${slug}`);
+}
+
+export async function deleteMarketAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  await deleteMarket(String(formData.get("marketId") ?? ""));
+  revalidatePath("/");
+  revalidatePath("/admin");
 }
 
 export async function resolveMarketAction(

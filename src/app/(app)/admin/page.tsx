@@ -6,6 +6,7 @@ import { formatDate, formatPoints, formatProbability, formatTimeLeft } from "@/l
 import { Forbidden } from "@/components/Forbidden";
 import { StatusPill } from "@/components/StatusPill";
 import { ResolveForm } from "./ResolveForm";
+import { DeleteMarketButton } from "./DeleteMarketButton";
 import { closeMarketAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +57,9 @@ export default async function AdminPage() {
           >
             <MarketHeading market={market} />
             <ResolveForm marketId={market.id} question={market.question} />
+            {market.tradeCount === 0 && (
+              <ZeroTradeControls market={market} />
+            )}
           </div>
         ))}
       </Section>
@@ -67,15 +71,18 @@ export default async function AdminPage() {
             className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4"
           >
             <MarketHeading market={market} />
-            <form action={closeMarketAction}>
-              <input type="hidden" name="marketId" value={market.id} />
-              <button
-                type="submit"
-                className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-faint hover:text-fg"
-              >
-                Close early
-              </button>
-            </form>
+            <div className="flex flex-wrap items-center gap-2">
+              <form action={closeMarketAction}>
+                <input type="hidden" name="marketId" value={market.id} />
+                <button
+                  type="submit"
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-faint hover:text-fg"
+                >
+                  Close early
+                </button>
+              </form>
+              {market.tradeCount === 0 && <ZeroTradeControls market={market} />}
+            </div>
           </div>
         ))}
       </Section>
@@ -118,6 +125,31 @@ function Section({
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
       )}
     </section>
+  );
+}
+
+/**
+ * Edit + delete controls, shown only for a market with no trades. Editing needs
+ * the market still OPEN (fixing a wrong close date counts); deleting is offered
+ * for any not-yet-settled zero-trade market. Both are re-guarded server-side.
+ */
+function ZeroTradeControls({
+  market,
+}: {
+  market: Awaited<ReturnType<typeof listMarkets>>[number];
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {market.status === "OPEN" && (
+        <Link
+          href={`/admin/edit/${market.slug}`}
+          className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-faint hover:text-fg"
+        >
+          Edit
+        </Link>
+      )}
+      <DeleteMarketButton marketId={market.id} question={market.question} />
+    </div>
   );
 }
 
